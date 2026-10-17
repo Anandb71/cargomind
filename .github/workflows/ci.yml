@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# CI runs with zero API keys: every model call is served by the offline rule-engine
+# and every external API by its offline fallback. The MCP server is spawned for real
+# over stdio (CARGOMIND_MCP_LOCAL=0), so the MCP integration is exercised end to end.
+env:
+  CARGOMIND_OFFLINE: "1"
+  CARGOMIND_MCP_LOCAL: "0"
+  PYTHONUTF8: "1"
+  FORCE_COLOR: "1"
+
+jobs:
+  test:
+    name: Lint, tests and end-to-end smoke (offline)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12 and dependencies
+        run: uv sync
+
+      - name: Ruff (advisory)
+        run: uv run ruff check src --exit-zero
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: Smoke - cargomind doctor
+        timeout-minutes: 5
+        run: uv run cargomind doctor
+
+      - name: Smoke - scripted demo under 30% chaos
+        timeout-minutes: 10
+        run: uv run cargomind demo --chaos 0.3
+
+  docker:
+    name: Docker image builds and serves /api/health
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t cargomind:ci .
+
+      - name: Run container and probe health
+        run: |
+          docker run -d --name cargomind -p 8080:8080 -e CARGOMIND_OFFLINE=1 cargomind:ci
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:8080/api/health; then
+              echo
+              echo "healthy after ~$((i * 2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "container did not become healthy" >&2
+          docker logs cargomind
+          exit 1
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f cargomind || true

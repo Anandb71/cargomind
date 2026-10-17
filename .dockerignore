@@ -1,0 +1,31 @@
+# Keep the build context small and never bake secrets or local state into the image.
+.git
+.github
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.adk
+.idea
+.vscode
+node_modules
+*.log
+
+# secrets (pass keys at runtime: --env-file .env, or Secret Manager on Cloud Run)
+.env
+.env.*
+*.env.local
+src/cargomind/.env
+
+# local runtime data (the container creates and seeds its own DB)
+data/
+
+# not needed at runtime
+docs/
+deploy/
+tests/
+Dockerfile
+.dockerignore

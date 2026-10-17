@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "cargomind-logistics": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "/ABSOLUTE/PATH/TO/cargomind",
+        "run",
+        "cargomind",
+        "mcp"
+      ],
+      "env": {
+        "PYTHONUTF8": "1"
+      }
+    }
+  }
+}
