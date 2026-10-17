@@ -3,8 +3,8 @@
 Hackathon: **"Problem statement: Logistics Handler"** (source: Excalidraw brief, events@2023 "D6").
 Tool sets: **Agent SDK + Google products**. Judged on: multi-model agents, conversational agents, API calls,
 MCP integration, feedback loop, self-healing agents, and an **A–Z README** (no half-baked info).
-Submission = public GitHub link (repo currently PRIVATE: github.com/Anandb71/cargomind — make public before
-submitting) via the Google Form `https://forms.gle/dZZ1BLH8vDAKr5wJ9` (registration form: forms.gle/z8TdF1V4yq3mfESN8).
+Submission = public GitHub link (repo PUBLIC: github.com/Anandb71/cargomind; visibility and history audited 2026-10-17)
+via the Google Form `https://forms.gle/dZZ1BLH8vDAKr5wJ9` (registration form: forms.gle/z8TdF1V4yq3mfESN8).
 Team must be 2–4 people. "First come first serve" → ship early, iterate after.
 
 ## Stack (verified versions)
@@ -65,13 +65,7 @@ Contracts between modules: `docs/CONTRACTS.md`.
 - Anthropic key → **"API key is not scoped to a workspace"** (400). Needs a workspace-scoped key from console.anthropic.com,
   else critic falls through to OpenAI. ResilientLlm now treats quota/auth errors as permanent: no retry, breaker trips at once.
 - Google **Geocoding API not enabled** on the Maps key → Nominatim fallback (Routes API works).
-- Session-2 live run (all 4 vendors live): doctor ~30s OK; `cargomind autopilot Chennai --agent` 70s, concierge routed to
-  disruption_autopilot correctly; `gemini-4-argon` AND `gemini-3.8-flash` hit 429 under autopilot load → breakers opened,
-  `gemini-3.6-flash` served the rest (Claude/OpenAI not needed, so the Anthropic key fix is still unverified).
-  Web: /api/health all 6 components true; /api/alerts 18 alerts; /api/alerts/scan 0.1s. Fix from this run: autopilot
-  staged cargo at Bengaluru while Watchtower flagged high weather there → `_alternate_hub` now skips hubs at high risk.
-  Gemini quota: enable billing / raise quota on the key's project for pro + fast tiers.
-- Tests: 79 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
+- Tests: 100 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
 - On Windows always set `PYTHONUTF8=1` when printing agent output (₹, ⇄ in text).
 
 ## Status log
@@ -93,10 +87,13 @@ Contracts between modules: `docs/CONTRACTS.md`.
   basemap/cache restoration only; screenshots are not included. No autopilot or deployment behavior changed.
 
 ## NEXT STEPS / TODO (update as you go)
-1. Merge the PR stack in order (#1 → #5) once the user OKs; re-run hermetic pytest + offline eval on main.
-2. Live-verify the Claude critic path (force it: `CARGOMIND_CHAOS` or a Gemini outage) to confirm the Anthropic key
-   works now; `cargomind eval --mode online` for live numbers in README. Google Maps MCP may need "Maps Grounding Lite".
+1. User authorized merging PRs #1–#4. Review hardening verified: real warehouse alternatives, outbound HOLD precedence,
+   zero-fuel alerts, stale alert retention, city-aware offline risk routing; 100 tests and 18/18 offline eval scenarios pass.
+2. Live run with real keys (`cargomind doctor`, `cargomind autopilot Chennai --agent`, `cargomind web`): record per-step
+   served_by/fallbacks above. Google Maps MCP may need "Maps Grounding Lite" API enabled (degrades gracefully).
 3. Screenshots of dashboard → `assets/screenshots/`, embed in README.
 4. Optional: Cloud Run deploy (`deploy/cloudrun.sh`; needs user `gcloud auth login` + project with billing).
-5. Before submission: make repo public (`gh repo edit Anandb71/cargomind --visibility public --accept-visibility-change-consequences`),
-   fill team names in README, submit the Google Form (user does this).
+5. Repo is public and team names are filled from confirmed GitHub collaborators: Anand B (@Anandb71), Junaid Ahamed
+   (@JunaidAhamed-7777). Submit the Google Form (user does this). Use docs/DEMO_SCRIPT.md for the 90-second judge path.
+
+- PR #5 review fix (2026-10-17): alternate staging checks real warehouse cities and accepts only confirmed low/medium weather risk; unavailable/high-risk alternatives produce a soft error with no movements. Main review fixes retained. Targeted autopilot/watchtower tests: 28 passed (offline/local MCP).

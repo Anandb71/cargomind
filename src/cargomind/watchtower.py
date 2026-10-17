@@ -80,7 +80,8 @@ def _stock_alerts() -> list[dict]:
 def _fleet_alerts() -> list[dict]:
     out = []
     for v in db.list_vehicles().get("vehicles", []):
-        if (v.get("fuel_pct") or 100) < 20:
+        fuel = v.get("fuel_pct")
+        if fuel is not None and fuel < 20:
             out.append(_alert(f"fuel:{v['id']}", "fleet", "warning", f"{v['id']} fuel {v.get('fuel_pct')}%",
                               f"{v.get('driver_name')} in {v.get('current_city')}", f"Status of vehicle {v['id']}?"))
         if (v.get("driver_hours_remaining") if v.get("driver_hours_remaining") is not None else 99) < 1:
@@ -90,33 +91,46 @@ def _fleet_alerts() -> list[dict]:
     return out
 
 
-async def _weather_alerts() -> list[dict]:
-    async def one(city: str) -> dict | None:
+async def _weather_alerts() -> tuple[list[dict], set[str]]:
+    """Return alerts and city alert IDs whose weather check failed."""
+    async def one(city: str) -> tuple[dict | None, str | None]:
         try:
             r = await asyncio.wait_for(weather.get_weather_risk(city=city, hours_ahead=24), timeout=8)
-        except Exception as exc:  # noqa: BLE001 - weather down → skip, the next scan retries
+            lvl = r.get("risk_level")
+            if r.get("status") == "error" or lvl not in ("low", "medium", "high"):
+                raise ValueError(r.get("error") or "Weather risk unavailable")
+        except Exception as exc:  # noqa: BLE001 - weather down → retain the previous city alert until a healthy scan
             log.debug("watchtower weather %s failed: %s", city, exc)
-            return None
-        lvl = r.get("risk_level")
+            return None, f"wx:{city}"
         if lvl not in ("high", "medium"):
-            return None
-        return _alert(f"wx:{city}", "weather", "critical" if lvl == "high" else "info",
-                      f"{lvl.title()} weather risk at {city} hub", r.get("summary") or "",
-                      f"Severe weather alert in {city}, severity {lvl} — run disruption autopilot")
+            return None, None
+        return (_alert(f"wx:{city}", "weather", "critical" if lvl == "high" else "info",
+                       f"{lvl.title()} weather risk at {city} hub", r.get("summary") or "",
+                       f"Severe weather alert in {city}, severity {lvl} — run disruption autopilot"), None)
 
-    return [a for a in await asyncio.gather(*(one(c) for c in HUBS)) if a]
+    results = await asyncio.gather(*(one(c) for c in HUBS))
+    return [a for a, _ in results if a], {failed for _, failed in results if failed}
 
 
 async def scan_once() -> dict[str, list[dict]]:
     """Run every check once; returns newly raised alerts and the full active set."""
     found: list[dict] = []
-    for check in (_shipment_alerts, _stock_alerts, _fleet_alerts):
+    failed_ids: set[str] = set()
+    for check, prefixes in (
+        (_shipment_alerts, ("exc:", "sla:")),
+        (_stock_alerts, ("stock:",)),
+        (_fleet_alerts, ("fuel:", "hours:")),
+    ):
         try:
             found.extend(check())
         except Exception as exc:  # noqa: BLE001 - one broken check must not blind the others
             journal.record("fault", f"watchtower:{check.__name__}", str(exc), action="skipped check")
-    found.extend(await _weather_alerts())
-    current = {a["id"]: a for a in found}
+            failed_ids.update(i for i in _active if i.startswith(prefixes))
+    weather_alerts, failed_weather_ids = await _weather_alerts()
+    found.extend(weather_alerts)
+    failed_ids.update(failed_weather_ids)
+    current = {i: {**a, "stale": True} for i, a in _active.items() if i in failed_ids}
+    current.update({a["id"]: a for a in found})
     new = [a for i, a in current.items() if i not in _active]
     for i, a in current.items():  # keep first-raised time for alerts that persist
         if i in _active:

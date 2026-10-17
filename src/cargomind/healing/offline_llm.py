@@ -24,6 +24,7 @@ class OfflineRule(BaseModel):
     tool: str
     keywords: list[str] = Field(default_factory=list)
     then: list[str] = Field(default_factory=list)  # follow-up tools after this one
+    min_cities: int = Field(default=0, ge=0)  # route tools need both endpoints
 
 
 class OfflinePolicy(BaseModel):
@@ -340,9 +341,15 @@ class OfflineLlm(BaseLlm):
     def _choose(self, text: str, tools: dict) -> list[str]:
         low = text.lower()
         scored = []
+        city_count = None
         for idx, rule in enumerate(self.policy.rules):
             if rule.tool not in tools:
                 continue
+            if rule.min_cities:
+                if city_count is None:
+                    city_count = len(_find_cities(text))
+                if city_count < rule.min_cities:
+                    continue
             hits = sum(1 for k in rule.keywords if re.search(rf"(?<![a-z]){re.escape(k.lower())}", low))
             if hits:
                 scored.append((hits, -idx, rule.tool))
