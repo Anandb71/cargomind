@@ -43,7 +43,8 @@ _ID_PATTERNS = {
     "shipment": (r"\bSHP[-_\s]?(\d{3,5})\b", "SHP-{}"),
     "order": (r"\bORD[-_\s]?(\d{3,5})\b", "ORD-{}"),
     "vehicle": (r"\bTRK[-_\s]?(\d{2,4})\b", "TRK-{}"),
-    "warehouse": (r"\bWH[-_\s]?([A-Za-z]{3})\b", "WH-{}"),
+    # "WHBLR"/"WH-BLR"/"wh blr", but never the "Wh" of "Which" (no-separator form must be uppercase)
+    "warehouse": (r"\b(?:(?-i:WH)[-_\s]?|WH[-_\s])([A-Za-z]{3})\b", "WH-{}"),
     "sku": (r"\bSKU[-_\s]?(\d[A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)\b", "SKU-{}"),  # digit first: "SKUs" is not an id
     "carrier": (r"\bCR[-_\s]?(\d{1,3})\b", "CR-{}"),
 }
@@ -232,12 +233,18 @@ def render(obj: Any, depth: int = 0) -> str:
     return _fmt_value(obj)
 
 
+_KEY_COLS = ("id", "status", "sku", "warehouse_id", "qty_on_hand", "reorder_point")
+
+
 def _table(rows: list[dict], limit: int = 12) -> str:
-    cols: list[str] = []
+    scalar: list[str] = []
     for r in rows[:limit]:
         for k, v in r.items():
-            if k not in cols and not isinstance(v, (dict, list)) and len(cols) < 7:
-                cols.append(k)
+            if k not in scalar and not isinstance(v, (dict, list)):
+                scalar.append(k)
+    # key columns (id, status) always survive the 7-column cap
+    priority = [k for k in scalar if k in _KEY_COLS]
+    cols = (priority + [k for k in scalar if k not in priority])[:7]
     head = "| " + " | ".join(c.replace("_", " ") for c in cols) + " |"
     sep = "|" + "---|" * len(cols)
     body = ["| " + " | ".join(_fmt_value(r.get(c, "")) for c in cols) + " |" for r in rows[:limit]]
