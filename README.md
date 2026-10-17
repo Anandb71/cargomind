@@ -5,6 +5,8 @@
 **A self-healing, multi-model, multi-agent logistics control tower.**
 Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lane, truck or SKU in an India-wide 3PL network. It plans, checks its own work and keeps answering when models, APIs or servers fail.
 
+**[Open the live CargoMind dashboard](https://cargomind-lilac.vercel.app)** · [Submission overview](docs/SUBMISSION.md)
+
 [![CI](https://github.com/Anandb71/cargomind/actions/workflows/ci.yml/badge.svg)](https://github.com/Anandb71/cargomind/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
 ![Google ADK 2.12](https://img.shields.io/badge/Google%20ADK-2.12-4285F4?logo=google&logoColor=white)
@@ -822,6 +824,16 @@ The image is `python:3.12-slim` + `uv`. It installs exactly what `uv.lock` pins 
 ---
 
 ## Deploy to Google Cloud Run
+
+### Hosted Vercel demo
+
+The public demo runs at **https://cargomind-lilac.vercel.app** with live provider keys configured through the Vercel CLI. Anonymous dashboard, health, KPI and static-asset requests returned HTTP 200. A live SSE tracking request completed with tool results and a final answer; its trace recorded Gemini backup and OpenAI providers.
+
+Vercel uses temporary per-instance SQLite storage, uploads and session memory. Data can reset on a cold start. Click **Scan now** for Watchtower alerts; the continuous background scanner is disabled on serverless hosting. Local and Cloud Run operation retain the background scanner.
+
+The deployment entrypoint is [`app.py`](app.py); [`vercel.json`](vercel.json) selects FastAPI and a 300-second function limit. From a linked project, deploy with `vercel --prod`. Set provider keys through `vercel env add NAME production` and redeploy; keep secrets out of source control.
+
+### Google Cloud Run
 
 **Prerequisites:** a Google Cloud project with billing enabled, and the [gcloud CLI](https://cloud.google.com/sdk/docs/install). Or use **Cloud Shell**, which already has everything.
 

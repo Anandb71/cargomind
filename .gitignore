@@ -10,3 +10,5 @@ data/uploads/
 .ruff_cache/
 .adk/
 *.log
+
+.vercel
