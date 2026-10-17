@@ -6,13 +6,19 @@ from __future__ import annotations
 import asyncio
 import json
 import mimetypes
-from typing import Any, AsyncIterator
+import re
+import time
+import uuid
+from collections.abc import AsyncIterator
+from typing import Any
 
+from google.adk.agents.run_config import RunConfig
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from cargomind import config
+from cargomind import config, telemetry
+from cargomind.safety.privacy import inspect_input, sanitize
 
 USER_ID = "operator"
 _runner: Runner | None = None
@@ -52,21 +58,33 @@ def event_to_dicts(event) -> list[dict]:
     author = event.author or "agent"
     served_by = (getattr(event, "custom_metadata", None) or {}).get("served_by")
     for fc in event.get_function_calls() or []:
-        out.append({"type": "tool_call", "author": author, "tool": fc.name, "args": _truncate(dict(fc.args or {}), 600), "served_by": served_by})
+        out.append({"type": "tool_call", "author": author, "tool": fc.name, "args": _truncate(sanitize(dict(fc.args or {})), 600), "served_by": served_by})
     for fr in event.get_function_responses() or []:
-        out.append({"type": "tool_result", "author": author, "tool": fr.name, "result": _truncate(fr.response)})
+        out.append({"type": "tool_result", "author": author, "tool": fr.name, "result": _truncate(sanitize(fr.response))})
     if event.content and event.content.parts and not getattr(event, "partial", False):
         text = "".join(p.text for p in event.content.parts if getattr(p, "text", None) and not getattr(p, "thought", False))
         if text.strip():
             out.append({"type": "text", "author": author, "text": text, "served_by": served_by,
                         "final": bool(event.is_final_response())})
-    return out
+    return sanitize(out)
 
 
 async def stream_chat(session_id: str, text: str, image_ref: str | None = None) -> AsyncIterator[dict]:
     """Run one operator turn; yield trace dicts as they happen."""
     from cargomind.healing import journal
 
+    gate = inspect_input(text)
+    if not gate["allowed"] or image_ref:
+        yield {"type": "text", "author": "cargomind_concierge", "final": True,
+               "text": gate["text"] if not gate["allowed"] else
+               "Privacy guard: image attachments are disabled. Submit operational IDs and structured logistics data only.",
+               "served_by": "guardrail/input"}
+        yield {"type": "done", "author": "runtime"}
+        return
+    text = gate["text"]
+    started = time.perf_counter()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", session_id):
+        session_id = f"private-{uuid.uuid4().hex}"
     runner = get_runner()
     queue: asyncio.Queue = asyncio.Queue()
     healing_q = journal.subscribe()
@@ -74,13 +92,15 @@ async def stream_chat(session_id: str, text: str, image_ref: str | None = None) 
 
     async def pump_agent():
         try:
-            async for event in runner.run_async(
-                user_id=USER_ID, session_id=session_id, new_message=build_message(text, image_ref)
-            ):
-                for d in event_to_dicts(event):
-                    await queue.put(d)
+            async with asyncio.timeout(90):
+                async for event in runner.run_async(
+                    user_id=USER_ID, session_id=session_id, new_message=build_message(text, image_ref),
+                    run_config=RunConfig(max_llm_calls=24),
+                ):
+                    for d in event_to_dicts(event):
+                        await queue.put(d)
         except Exception as exc:  # noqa: BLE001
-            await queue.put({"type": "error", "author": "runtime", "text": f"{type(exc).__name__}: {exc}"})
+            await queue.put(sanitize({"type": "error", "author": "runtime", "text": f"{type(exc).__name__}: {exc}"}))
         finally:
             done.set()
 
@@ -88,20 +108,21 @@ async def stream_chat(session_id: str, text: str, image_ref: str | None = None) 
         while not done.is_set():
             try:
                 ev = await asyncio.wait_for(healing_q.get(), timeout=0.25)
-                await queue.put({"type": "healing", "author": "self_healing", "event": ev})
-            except asyncio.TimeoutError:
+                await queue.put({"type": "healing", "author": "self_healing", "event": sanitize(ev)})
+            except TimeoutError:
                 continue
 
+    usage_context = telemetry.begin_run()
     tasks = [asyncio.create_task(pump_agent()), asyncio.create_task(pump_healing())]
     yield {"type": "agent", "author": "cargomind_concierge", "text": "thinking…", "mode": config.mode_summary()}
     try:
         while not (done.is_set() and queue.empty()):
             try:
-                yield await asyncio.wait_for(queue.get(), timeout=0.3)
-            except asyncio.TimeoutError:
+                yield sanitize(await asyncio.wait_for(queue.get(), timeout=0.3))
+            except TimeoutError:
                 continue
         while not healing_q.empty():
-            yield {"type": "healing", "author": "self_healing", "event": healing_q.get_nowait()}
+            yield {"type": "healing", "author": "self_healing", "event": sanitize(healing_q.get_nowait())}
     finally:
         for t in tasks:
             t.cancel()
@@ -109,6 +130,10 @@ async def stream_chat(session_id: str, text: str, image_ref: str | None = None) 
             journal.unsubscribe(healing_q)
         except Exception:
             pass
+        summary = telemetry.run_summary()
+        summary["elapsed_ms"] = round((time.perf_counter()-started)*1000, 2)
+        telemetry.end_run(usage_context)
+    yield {"type": "usage", "author": "runtime", "metrics": summary}
     yield {"type": "done", "author": "runtime"}
 
 

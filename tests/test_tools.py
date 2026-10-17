@@ -427,7 +427,7 @@ def test_draft_notifications_per_channel():
     assert "https://track.cargomind.dev/SHP-1002" in sms["message"] and "Sorry" in sms["message"]
     email = T.draft_customer_notification("shp1002", "heavy rain near Krishnagiri", "email")
     assert email["subject"].startswith("Your shipment SHP-1002") and "apologise" in email["message"]
-    assert email["recipient"] and "@" in email["recipient"]
+    assert not email["recipient"]  # Operational-only seed contains no personal contact endpoints.
     wa = T.draft_customer_notification("SHP-1002", "out for delivery", "WhatsApp")
     assert wa["channel"] == "whatsapp" and wa["category"] == "out_for_delivery" and "*" in wa["message"]
     assert T.draft_customer_notification("SHP-1002", "x", "pigeon")["status"] == "error"

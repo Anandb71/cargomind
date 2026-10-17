@@ -56,6 +56,7 @@
   const HAS_LANG_RE = /\b(in|into)\s+(hindi|tamil|english|marathi|bengali|telugu|kannada)\b/i;
 
   const QUICK = [
+    'Run simulation example',
     'Where is SHP-1003?',
     "Plan today's dispatch from Mumbai",
     'Any weather risk on Mumbai → Pune?',

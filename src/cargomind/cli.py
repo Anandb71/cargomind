@@ -147,7 +147,14 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("--agent", action="store_true", help="run through the multi-agent concierge instead of the direct tools")
     sub.add_parser("watchtower")
     sub.add_parser("eval", add_help=False)
+    sim = sub.add_parser("simulate", help="Verify and optimize a structured logistics scenario")
+    sim.add_argument("--input", help="Scenario JSON path; omit to run the labeled synthetic example")
+    sub.add_parser("benchmark", add_help=False)
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "benchmark":
+        from cargomind.evals.simulation_benchmark import main as benchmark_main
+        benchmark_main(argv[1:])
+        return
     if argv and argv[0] == "eval":  # pass every flag straight through to the eval runner
         from cargomind.evals.runner import main as eval_main
 
@@ -155,7 +162,15 @@ def main(argv: list[str] | None = None) -> None:
         return
     args = p.parse_args(argv)
 
-    if args.cmd == "chat":
+    if args.cmd == "simulate":
+        from pathlib import Path
+
+        from cargomind.simulation.engine import run_simulation, sample_scenario
+        from cargomind.simulation.parsing import strict_object
+
+        payload = strict_object(Path(args.input).read_bytes()) if args.input else sample_scenario()
+        print(json.dumps(run_simulation(payload), ensure_ascii=False, indent=2))
+    elif args.cmd == "chat":
         asyncio.run(_chat())
     elif args.cmd == "demo":
         asyncio.run(_demo(args.chaos))

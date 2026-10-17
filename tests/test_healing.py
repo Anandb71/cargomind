@@ -262,6 +262,7 @@ def test_no_fallback_after_first_streamed_chunk():
 
 
 def test_build_model_chains(monkeypatch):
+    monkeypatch.setattr(config, "PROVIDER", "multi")
     from google.adk.models.google_llm import Gemini
 
     from cargomind.healing.offline_llm import OfflineLlm, OfflinePolicy

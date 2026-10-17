@@ -165,7 +165,7 @@ def test_kpis_keys(fresh_db):
 
 def test_outbox_and_directory(fresh_db):
     r = db.add_outbox(shipment_id="SHP-1003", channel="email", subject="Delay", message="Sorry for the delay")
-    assert r["status"] == "ok" and r["entry"]["recipient"].endswith("@example.com")
+    assert r["status"] == "ok" and r["entry"]["recipient"] == ""
     assert db.list_outbox(5)["messages"][0]["id"] == r["outbox_id"]
     assert db.list_carriers()["count"] == 5
     assert isinstance(db.list_carriers()["carriers"][0]["modes"], list)

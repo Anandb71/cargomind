@@ -336,11 +336,11 @@ def counts() -> dict[str, int]:
 
 # --------------------------------------------------------------------------- seed data
 _WAREHOUSES = [
-    ("WH-BOM", "Bhiwandi Mega DC", "Mumbai", "Bhiwandi Logistics Park, Thane", 4200, "Prakash Shinde", 1),
-    ("WH-DEL", "Delhi NCR Hub", "Delhi", "Kundli Industrial Area, NH-44", 3800, "Harpreet Kaur", 0),
-    ("WH-BLR", "Bengaluru South DC", "Bengaluru", "Electronic City Phase 2, Hosur Road", 3000, "Kavya Ramesh", 1),
-    ("WH-MAA", "Chennai Port DC", "Chennai", "SIPCOT Industrial Park, Sriperumbudur", 2600, "Senthil Kumar", 0),
-    ("WH-HYD", "Hyderabad Central DC", "Hyderabad", "Shamshabad Logistics Zone", 2800, "Farhan Siddiqui", 1),
+    ("WH-BOM", "Bhiwandi Mega DC", "Mumbai", "", 4200, "Manager-WH-BOM", 1),
+    ("WH-DEL", "Delhi NCR Hub", "Delhi", "", 3800, "Manager-WH-DEL", 0),
+    ("WH-BLR", "Bengaluru South DC", "Bengaluru", "", 3000, "Manager-WH-BLR", 1),
+    ("WH-MAA", "Chennai Port DC", "Chennai", "", 2600, "Manager-WH-MAA", 0),
+    ("WH-HYD", "Hyderabad Central DC", "Hyderabad", "", 2800, "Manager-WH-HYD", 1),
 ]
 
 # sku, name, category, unit_cost_inr, supplier, base reorder point, reorder qty
@@ -373,16 +373,16 @@ _FORCED_LOW = {
 
 # id, type, capacity_kg, status, city, home wh, driver, hours today, fuel %, refrigerated
 _VEHICLES = [
-    ("TRK-101", "32ft MXL container", 15000, "available", "Mumbai", "WH-BOM", "Ramesh Yadav", 2.5, 88, 0),
-    ("TRK-102", "Eicher 14ft", 4000, "available", "Delhi", "WH-DEL", "Gurpreet Singh", 9.5, 64, 0),
-    ("TRK-103", "32ft SXL container", 7500, "on_route", "Mumbai", "WH-BOM", "Mohammed Irfan", 6.0, 52, 1),
-    ("TRK-104", "Tata Ace", 750, "available", "Bengaluru", "WH-BLR", "Suresh Gowda", 1.0, 91, 0),
-    ("TRK-105", "Reefer 20ft (cold chain)", 5000, "available", "Hyderabad", "WH-HYD", "Venkat Rao", 3.0, 76, 1),
-    ("TRK-106", "Tata Ace", 750, "on_route", "Bengaluru", "WH-BLR", "Arjun Pillai", 4.5, 47, 0),
-    ("TRK-107", "Tata 407", 2500, "available", "Chennai", "WH-MAA", "Karthik Subramanian", 0.0, 18, 0),
-    ("TRK-108", "Eicher 14ft", 4000, "on_route", "Delhi", "WH-DEL", "Imran Shaikh", 5.5, 58, 0),
-    ("TRK-109", "Ashok Leyland Dost", 1250, "maintenance", "Pune", "WH-BOM", "Vijay Patil", 0.0, 35, 0),
-    ("TRK-110", "Mahindra Bolero Pickup", 1500, "available", "Mumbai", "WH-BOM", "Sandeep Jadhav", 7.0, 69, 0),
+    ("TRK-101", "32ft MXL container", 15000, "available", "Mumbai", "WH-BOM", "Driver-TRK-101", 2.5, 88, 0),
+    ("TRK-102", "Eicher 14ft", 4000, "available", "Delhi", "WH-DEL", "Driver-TRK-102", 9.5, 64, 0),
+    ("TRK-103", "32ft SXL container", 7500, "on_route", "Mumbai", "WH-BOM", "Driver-TRK-103", 6.0, 52, 1),
+    ("TRK-104", "Tata Ace", 750, "available", "Bengaluru", "WH-BLR", "Driver-TRK-104", 1.0, 91, 0),
+    ("TRK-105", "Reefer 20ft (cold chain)", 5000, "available", "Hyderabad", "WH-HYD", "Driver-TRK-105", 3.0, 76, 1),
+    ("TRK-106", "Tata Ace", 750, "on_route", "Bengaluru", "WH-BLR", "Driver-TRK-106", 4.5, 47, 0),
+    ("TRK-107", "Tata 407", 2500, "available", "Chennai", "WH-MAA", "Driver-TRK-107", 0.0, 18, 0),
+    ("TRK-108", "Eicher 14ft", 4000, "on_route", "Delhi", "WH-DEL", "Driver-TRK-108", 5.5, 58, 0),
+    ("TRK-109", "Ashok Leyland Dost", 1250, "maintenance", "Pune", "WH-BOM", "Driver-TRK-109", 0.0, 35, 0),
+    ("TRK-110", "Mahindra Bolero Pickup", 1500, "available", "Mumbai", "WH-BOM", "Driver-TRK-110", 7.0, 69, 0),
 ]
 _STATE_CODES = {"Mumbai": "MH", "Delhi": "DL", "Bengaluru": "KA", "Hyderabad": "TS", "Chennai": "TN", "Pune": "MH"}
 
@@ -395,14 +395,7 @@ _CARRIERS = [
     ("CR-05", "Deccan Coastal Logistics", "road", 30.0, 2.6, 0.90, 46.0, 12000),
 ]
 
-_CUSTOMERS = [
-    "Sharma Textiles Pvt Ltd", "Patel Agro Exports", "Iyer Pharma Distributors", "Reddy Electronics Mart",
-    "Gupta Hardware & Sanitary", "Nair Spice Traders", "Kapoor Auto Components", "Mehta Home Appliances",
-    "Banerjee Book House", "Joshi Medical Supplies", "Desai Solar Solutions", "Khan Leather Works",
-    "Pillai Marine Foods", "Agarwal Steel Traders", "Chopra Lifestyle Retail", "Menon Healthcare LLP",
-    "Singh Cold Storage", "Rao Polymers", "Bose Electricals", "Kulkarni Engineering Works",
-    "Ananya Krishnan", "Rohit Verma", "Fatima Sheikh", "Vikram Malhotra", "Lakshmi Narayanan",
-]
+_CUSTOMERS = [f"Customer-{i:03d}" for i in range(1, 26)]
 
 # status, priority, origin, destination, contents, extra(dict)
 _SHIPMENT_PLAN: list[tuple[str, str, str, str, str, dict[str, Any]]] = [
@@ -475,8 +468,10 @@ def _seed(conn: sqlite3.Connection) -> None:
 
     for wid, name, city, addr, cap, mgr, cold in _WAREHOUSES:
         lat, lon = CITIES[city]
+        utilisation = round(rng.uniform(58, 91), 1)
+        _phone(rng)  # Preserve the seeded business RNG sequence, without storing contacts.
         ins("INSERT INTO warehouses VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (wid, name, city, addr, lat, lon, cap, round(rng.uniform(58, 91), 1), mgr, _phone(rng), cold))
+            (wid, name, city, "", lat, lon, cap, utilisation, f"Manager-{wid}", "", cold))
 
     wh_ids = [w[0] for w in _WAREHOUSES]
     for sku, name, cat, cost, supplier, base_rp, rq in _SKUS:
@@ -495,16 +490,17 @@ def _seed(conn: sqlite3.Connection) -> None:
                  _iso(now - timedelta(hours=rng.uniform(0.5, 30)))))
 
     for vid, vtype, cap, status, city, home, driver, hrs, fuel, reefer in _VEHICLES:
-        reg = f"{_STATE_CODES.get(city, 'MH')}-{rng.randint(1, 48):02d}-" \
+        _registration = f"{_STATE_CODES.get(city, 'MH')}-{rng.randint(1, 48):02d}-" \
               f"{chr(65 + rng.randint(0, 25))}{chr(65 + rng.randint(0, 25))}-{rng.randint(1000, 9999)}"
+        _phone(rng)
         ins("INSERT INTO vehicles VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            (vid, vtype, cap, status, city, home, driver, _phone(rng), hrs, fuel, reefer, reg))
+            (vid, vtype, cap, status, city, home, f"Driver-{vid}", "", hrs, fuel, reefer, ""))
 
     carrier_speed: dict[str, float] = {}
     for cid, name, modes, base, perkg, rel, speed, maxw in _CARRIERS:
         carrier_speed[cid] = speed
         ins("INSERT INTO carriers VALUES (?,?,?,?,?,?,?,?,?)",
-            (cid, name, modes, base, perkg, rel, speed, maxw, f"ops@{_slug(name)}.example.com"))
+            (cid, name, modes, base, perkg, rel, speed, maxw, ""))
 
     customers = _CUSTOMERS[:]
     rng.shuffle(customers)
@@ -517,8 +513,7 @@ def _seed(conn: sqlite3.Connection) -> None:
     for i, (status, prio, origin, dest, contents, extra) in enumerate(_SHIPMENT_PLAN):
         sid, oid = f"SHP-{1001 + i}", f"ORD-{5001 + i}"
         customer = customers[i % len(customers)]
-        email = f"{'orders.' if ' ' in customer and not customer.split()[0].endswith('a') else ''}" \
-                f"{_slug(customer)}@example.com"
+        email = ""
         weight = float(extra.get("weight") or round(math.exp(rng.uniform(math.log(5), math.log(2000))), 1))
         gc_km = haversine_km(origin, dest)
         if "carrier" in extra:
@@ -610,8 +605,9 @@ def _seed(conn: sqlite3.Connection) -> None:
 
         if vehicle:
             vehicle_city[vehicle] = last_city
+        _phone(rng)
         ins("INSERT INTO shipments VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (sid, oid, customer, email, _phone(rng), origin, dest, status, prio, weight, carrier,
+            (sid, oid, customer, email, "", origin, dest, status, prio, weight, carrier,
              vehicle, _iso(eta), _iso(promised), _iso(last_upd), last_city, extra.get("notes", ""),
              contents, _iso(created)))
 

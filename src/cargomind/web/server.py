@@ -12,8 +12,6 @@ endpoint answers 503 (or, for chat, a single SSE ``error`` event) instead.
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
 import contextlib
 import dataclasses
 import datetime as _dt
@@ -27,18 +25,19 @@ import os
 import platform
 import re
 import time
-import uuid
 from collections.abc import AsyncIterator, Iterable
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from cargomind import config
+from cargomind.safety.privacy import inspect_input, sanitize
 
 log = logging.getLogger("cargomind.web")
 
@@ -68,7 +67,7 @@ async def _lifespan(_app: FastAPI):
             task = asyncio.create_task(watchtower.run_watchtower(60), name="cargomind-watchtower")
             log.info("watchtower started (60s scan interval)")
         except Exception as exc:  # module missing or not a coroutine: dashboard still works
-            log.info("watchtower not started: %s", exc)
+            log.info("watchtower not started (%s)", type(exc).__name__)
     asyncio.get_running_loop().run_in_executor(None, _warm_data)
     try:
         yield
@@ -98,6 +97,10 @@ class _RevalidatingStaticFiles(StaticFiles):
 
 app.mount("/static", _RevalidatingStaticFiles(directory=STATIC_DIR), name="static")
 
+from cargomind.web.simulation import router as simulation_router  # noqa: E402
+
+app.include_router(simulation_router)
+
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -125,7 +128,7 @@ def _json_default(o: Any) -> Any:
 
 
 def _dumps(obj: Any) -> str:
-    return json.dumps(obj, default=_json_default, ensure_ascii=False)
+    return json.dumps(sanitize(obj), default=_json_default, ensure_ascii=False)
 
 
 def _sse(obj: Any) -> str:
@@ -142,8 +145,8 @@ def _lazy(module: str):
     try:
         return importlib.import_module(module)
     except Exception as exc:  # ImportError, or the module blew up while importing
-        log.warning("subsystem %s unavailable: %s", module, exc)
-        raise HTTPException(status_code=503, detail=f"{module} unavailable: {exc}") from exc
+        log.warning("subsystem %s unavailable (%s)", module, type(exc).__name__)
+        raise HTTPException(status_code=503, detail=f"{module} unavailable") from None
 
 
 async def _call(fn: Any, *args: Any, **kwargs: Any) -> Any:
@@ -221,6 +224,7 @@ def favicon() -> Response:
 # chat (SSE relay of cargomind.runtime.stream_chat)
 # ---------------------------------------------------------------------------
 class ChatIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     session_id: str = Field(min_length=1, max_length=128)
     message: str = Field(default="", max_length=8000)
     image_ref: str | None = None
@@ -239,8 +243,8 @@ async def _relay(stream: AsyncIterator[dict]) -> AsyncIterator[str]:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            log.exception("stream_chat failed")
-            await queue.put({"type": "error", "author": "system", "text": f"Agent run failed: {type(exc).__name__}: {exc}"})
+            log.warning("stream_chat failed (%s)", type(exc).__name__)
+            await queue.put({"type": "error", "author": "system", "text": "Agent run failed; retry or use the verified simulation interface."})
         finally:
             await queue.put(sentinel)
 
@@ -276,13 +280,20 @@ async def _relay(stream: AsyncIterator[dict]) -> AsyncIterator[str]:
 
 @app.post("/api/chat")
 async def chat(body: ChatIn) -> StreamingResponse:
+    gate = inspect_input(body.message)
+    if not gate["allowed"]:
+        async def blocked():
+            yield _sse({"type": "text", "author": "cargomind_concierge", "text": gate["text"],
+                        "final": True, "served_by": "guardrail/input"})
+            yield _sse({"type": "done", "author": "system"})
+        return StreamingResponse(blocked(), media_type="text/event-stream", headers=_SSE_HEADERS)
     async def events() -> AsyncIterator[str]:
         try:
             runtime = importlib.import_module("cargomind.runtime")
             stream = runtime.stream_chat(body.session_id, body.message, body.image_ref or None)
         except Exception as exc:
-            log.warning("agent runtime unavailable: %s", exc)
-            yield _sse({"type": "error", "author": "system", "text": f"Agent runtime unavailable: {type(exc).__name__}: {exc}"})
+            log.warning("agent runtime unavailable (%s)", type(exc).__name__)
+            yield _sse({"type": "error", "author": "system", "text": "Agent runtime unavailable; retry or use the verified simulation interface."})
             return
         if asyncio.iscoroutine(stream):  # tolerate `async def stream_chat` returning an iterator
             stream = await stream
@@ -327,70 +338,13 @@ def _verify_with_pillow(data: bytes) -> bool:
 
 @app.post("/api/upload")
 async def upload(request: Request) -> dict:
-    """Accepts multipart (`file` or `image` field) or JSON `{filename, data_b64}`."""
-    declared = request.headers.get("content-length")
-    if declared and declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES * 1.4 + 4096:
-        raise HTTPException(413, "Image too large (max 8 MB).")
-
-    ctype = request.headers.get("content-type", "")
-    filename = "upload"
-    if ctype.startswith("multipart/form-data"):
-        try:
-            form = await request.form(max_files=1, max_fields=10)
-        except Exception as exc:
-            raise HTTPException(400, f"Malformed multipart body: {exc}") from exc
-        field = form.get("file") or form.get("image")
-        if field is None or not hasattr(field, "read"):
-            raise HTTPException(400, "Expected an image file in field 'file'.")
-        filename = getattr(field, "filename", None) or filename
-        data = await field.read(MAX_UPLOAD_BYTES + 1)
-        await field.close()
-    else:
-        try:
-            payload = await request.json()
-            raw = str(payload.get("data_b64") or "")
-            filename = str(payload.get("filename") or filename)
-        except Exception as exc:
-            raise HTTPException(400, "Send multipart/form-data or JSON {filename, data_b64}.") from exc
-        if raw.startswith("data:") and "," in raw:  # tolerate data URLs
-            raw = raw.split(",", 1)[1]
-        if len(raw) > MAX_UPLOAD_BYTES * 4 // 3 + 8:
-            raise HTTPException(413, "Image too large (max 8 MB).")
-        try:
-            data = base64.b64decode(raw, validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise HTTPException(400, "data_b64 is not valid base64.") from exc
-
-    if not data:
-        raise HTTPException(400, "Empty upload.")
-    if len(data) > MAX_UPLOAD_BYTES:
-        raise HTTPException(413, "Image too large (max 8 MB).")
-    sniffed = _sniff_image(data)
-    if sniffed is None or not _verify_with_pillow(data):
-        raise HTTPException(415, "Unsupported file: upload a PNG, JPEG, GIF, WebP or BMP image.")
-    ext, mime = sniffed
-
-    upload_dir = Path(config.UPLOAD_DIR)
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    name = f"{uuid.uuid4().hex}.{ext}"
-    (upload_dir / name).write_bytes(data)
-    return {
-        "image_ref": name,
-        "url": f"/api/uploads/{name}",
-        "content_type": mime,
-        "bytes": len(data),
-        "original_filename": Path(filename).name[:120],
-    }
+    """Images are excluded from the operational-only privacy boundary."""
+    raise HTTPException(403, "Privacy guard: image uploads are disabled. Use structured operational data only.")
 
 
 @app.get("/api/uploads/{name}")
 def get_upload(name: str) -> FileResponse:
-    if not _UPLOAD_NAME_RE.match(name):
-        raise HTTPException(404, "Not found")
-    path = Path(config.UPLOAD_DIR) / name
-    if not path.is_file():
-        raise HTTPException(404, "Not found")
-    return FileResponse(path)
+    raise HTTPException(403, "Privacy guard: image access is disabled.")
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +374,9 @@ def _norm_rating(r: int | str) -> int:
 
 @app.post("/api/feedback")
 def feedback(body: FeedbackIn) -> dict:
+    for value in (body.comment, body.message, body.session_id, body.agent):
+        if value and not inspect_input(value)["allowed"]:
+            raise HTTPException(422, "Privacy guard: feedback must contain operational data only.")
     store = _lazy("cargomind.feedback.store")
     rating = _norm_rating(body.rating)
     result = store.add_feedback(body.session_id, rating, comment=body.comment, message=body.message, agent=body.agent)
@@ -674,6 +631,9 @@ def health() -> dict:
         "app": config.APP_NAME,
         "mode": _jsonable(mode),
         "offline_forced": config.FORCE_OFFLINE,
+        "privacy_guard": "operational-data-only",
+        "simulation": {"url": "/simulation", "protocol": "CargoMind JSON handoff 1.0",
+                       "independent_evaluation": True, "writes": False},
         "chaos_rate": _chaos_rate(),
         "components": {
             "runtime": _module_present("cargomind.runtime"),
@@ -695,9 +655,22 @@ def health() -> dict:
     }
 
 
+@app.get("/api/usage")
+def usage() -> dict:
+    from cargomind.telemetry import snapshot
+    return snapshot()
+
+
 @app.exception_handler(HTTPException)
 async def _http_error(_: Request, exc: HTTPException) -> JSONResponse:
-    return JSONResponse({"error": exc.detail, "status": exc.status_code}, status_code=exc.status_code)
+    return JSONResponse(sanitize({"error": exc.detail, "status": exc.status_code}), status_code=exc.status_code)
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+    # Pydantic's default error includes the rejected raw input, which may contain PII.
+    return JSONResponse({"error": "invalid_request", "status": 422,
+                         "issues": [str(item["type"]) for item in exc.errors()]}, status_code=422)
 
 
 def main() -> None:
