@@ -44,11 +44,41 @@ def test_reroute_skips_staging_hub_at_high_weather_risk(monkeypatch):
     assert "warning" not in r
 
 
-def test_reroute_warns_when_every_nearby_hub_is_stormy(monkeypatch):
+def test_reroute_refuses_when_every_nearby_hub_is_stormy(monkeypatch):
     monkeypatch.setattr(autopilot.weather, "get_weather_risk", _fake_weather(set(autopilot.HUBS)))
     r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai", "cyclone", "high"))
-    assert r["alternate_hub"] == "Bengaluru"  # nearest, but flagged for the operator
-    assert r["alternate_hub_weather"] == "high" and "operator review" in r["warning"]
+    assert r["status"] == "error"
+    assert r["shipment_actions"] == [] and r["vehicle_moves"] == []
+    assert "confirmed low or medium weather risk" in r["error"]
+
+
+@pytest.mark.parametrize("failure", [TimeoutError(), {"status": "error"}, {"risk_level": "unknown"}])
+def test_reroute_skips_unknown_weather_for_confirmed_warehouse(monkeypatch, failure):
+    async def risk(city, hours_ahead):
+        if city == "Bengaluru":
+            if isinstance(failure, Exception):
+                raise failure
+            return failure
+        return {"status": "ok", "risk_level": "low"}
+
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", risk)
+    monkeypatch.setattr(autopilot.db, "list_warehouses", lambda: {"warehouses": [
+        {"city": "Chennai"}, {"city": "Bengaluru"}, {"city": "Hyderabad"},
+    ]})
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai"))
+    assert r["alternate_hub"] == "Hyderabad"
+    assert r["alternate_hub_weather"] == "low"
+
+
+def test_reroute_returns_soft_error_when_all_weather_is_unknown(monkeypatch):
+    async def risk(city, hours_ahead):
+        return {"status": "error", "error": "provider unavailable"}
+
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", risk)
+    r = asyncio.run(autopilot.run_autopilot("Chennai"))
+    assert r["status"] == "error"
+    assert r["reroutes"]["shipment_actions"] == []
+    assert r["reroutes"]["vehicle_moves"] == []
 
 
 def test_autopilot_unknown_city_is_soft_error():

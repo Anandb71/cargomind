@@ -69,9 +69,9 @@ def _affected(city: str) -> list[dict[str, Any]]:
 
 
 async def _alternate_hub(city: str, avoid: set[str] | None = None, max_checked: int = 3) -> dict[str, Any] | None:
-    """Nearest real warehouse hub that is not itself at high weather risk (don't stage cargo into the next storm).
+    """Nearest real warehouse hub with confirmed low or medium weather risk.
 
-    Returns None when the network has no warehouse outside ``city``.
+    Returns None when no checked warehouse has a confirmed suitable weather risk.
     """
     avoid = avoid or set()
     hubs = {
@@ -86,15 +86,14 @@ async def _alternate_hub(city: str, avoid: set[str] | None = None, max_checked: 
     skipped = []
     for hub in candidates[:max_checked]:
         try:
-            risk = (await asyncio.wait_for(weather.get_weather_risk(city=hub, hours_ahead=48), timeout=8)).get("risk_level")
-        except Exception:  # noqa: BLE001 - weather unknown: don't block the plan on it
+            result = await asyncio.wait_for(weather.get_weather_risk(city=hub, hours_ahead=48), timeout=8)
+            risk = result.get("risk_level") if result.get("status") != "error" else "unknown"
+        except Exception:  # noqa: BLE001 - try another warehouse when weather is unavailable
             risk = "unknown"
-        if risk != "high":
+        if risk in ("low", "medium"):
             return {"hub": hub, "km": round(gazetteer.haversine_km(city, hub), 1), "weather_risk": risk, "skipped": skipped}
         skipped.append({"hub": hub, "weather_risk": risk})
-    hub = candidates[0]  # every nearby hub is at high risk: nearest one, flagged for the operator
-    return {"hub": hub, "km": round(gazetteer.haversine_km(city, hub), 1), "weather_risk": "high", "skipped": skipped,
-            "warning": f"All {len(skipped)} nearest hubs are at high weather risk; staging at {hub} needs operator review."}
+    return None
 
 
 async def assess_disruption_impact(city: str, event: str = "disruption", severity: str = "high") -> dict:
@@ -174,7 +173,7 @@ async def propose_disruption_reroutes(city: str, event: str = "disruption", seve
     if pick is None:
         return {
             "status": "error", "city": resolved, "event": ev, "severity": sev,
-            "error": f"No alternate warehouse hub is available outside {resolved}.",
+            "error": f"No alternate warehouse hub with confirmed low or medium weather risk is available outside {resolved}.",
             "suggestions": ["Ask the operator to verify an alternate staging location before moving loads."],
             "shipment_actions": [], "vehicle_moves": [], "requires_approval": True,
         }
