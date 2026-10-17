@@ -75,3 +75,16 @@ def test_critic_exits_loop_when_valid():
 def test_render_table():
     out = render({"shipments": [{"id": "SHP-1", "status": "delayed"}, {"id": "SHP-2", "status": "in_transit"}]})
     assert "| id | status |" in out
+
+
+def test_which_is_not_a_warehouse_id_and_tables_keep_status():
+    from cargomind.healing.offline_llm import _ID_PATTERNS, _table
+    import re
+
+    pat = _ID_PATTERNS["warehouse"][0]
+    assert re.search(pat, "Which SKUs are low on stock?", re.I) is None
+    assert re.search(pat, "which ones", re.I) is None
+    for t in ("stock at WH-BLR", "stock at WHBLR", "stock at wh-blr"):
+        assert re.search(pat, t, re.I).group(1).upper() == "BLR"
+    rows = [{"id": "SHP-1", **{f"c{i}": i for i in range(8)}, "status": "delayed"}]
+    assert "delayed" in _table(rows) and "status" in _table(rows).splitlines()[0]
