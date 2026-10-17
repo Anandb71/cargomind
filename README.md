@@ -22,6 +22,10 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 
 ---
 
+**Judge fast path:** [90-second demo](docs/DEMO_SCRIPT.md) · [criterion-by-criterion evidence](docs/JUDGING.md) · [reproducible eval report](docs/EVAL_REPORT.md). Verified: **100 tests pass**, **18/18 offline scenarios succeed**, routing **F1 0.974**. The timed demo uses the offline engine; live provider usage is visible in the trace.
+
+**Resilience evidence:** [30% chaos eval](docs/EVAL_CHAOS_REPORT.md) also completed **18/18 scenarios**, with **14 injected faults**, **12 retries** and **12 recorded recoveries**. Both eval runs use the offline model and in-process MCP; CI separately exercises stdio MCP and Docker.
+
 ## Contents
 
 - [The 30-second pitch](#the-30-second-pitch)
@@ -61,7 +65,7 @@ More depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sequence diagrams), [d
 **CargoMind** puts the whole control tower behind one conversation:
 
 - **One concierge, many specialists.** A conversational Gemini agent sends each request to 8 specialist agents: tracking, routes and risk, inventory, dispatch, customer comms, photo inspection, the ops briefing and the Disruption Autopilot. The graph has 23 ADK agents in total and uses every ADK workflow pattern: `LlmAgent` + `AgentTool`, `SequentialAgent`, `ParallelAgent` and `LoopAgent`.
-- **Multi-model by design.** Gemini Flash handles conversation. Gemini Pro plans. Gemini vision inspects proof-of-delivery photos. Claude or GPT, a different vendor, critiques every dispatch plan independently. A deterministic offline rule-engine is the last link of every model chain.
+- **Multi-model by design.** Conversation, planning and vision tiers prefer Gemini models. The independent dispatch critic prefers Claude or GPT. The trace records which provider actually ran after any fallback. A deterministic offline rule-engine is the last link of every model chain.
 - **It checks its own work.** The dispatch planner and an independent critic run in a feedback loop. The critic checks truck capacity, driver hours, cold-chain and hazmat handling, SLA and weather. The planner revises until the plan is valid. Nothing is written to the database until you say *"commit the plan"*.
 - **It acts before you ask.** The **Watchtower** scans the network every 60 s for SLA breach risk, exceptions, low stock, fleet problems and hub weather, and turns each alert into a one-click question. For a cyclone, flood, strike or closure, the **Disruption Autopilot** assesses the impact, plans reroutes and drafts customer notices in parallel, then hands the operator an incident action plan to approve.
 - **It learns from the operator.** Thumbs up or down, comments and *"remember: always..."* are turned into lessons. Those lessons are added to the agent's instructions on every turn.
@@ -681,7 +685,7 @@ uv run python -c "from cargomind.feedback.store import render_lessons_block, sta
 | 2b (parallel) | `notice_drafter` (fast) | `draft_disruption_notices` | Customer notice **drafts** for urgent shipments (`sent: false`) → `autopilot_notices` |
 | 3 | `autopilot_commander` (fast) | – | Incident action plan: Situation, Exposure, Actions (owner + deadline), Customer comms, Approval needed |
 
-Nothing is executed. The operator approves with *"send the notices"* / *"commit the reroutes"*, or asks for changes. `run_autopilot(city, event, severity)` runs the three tools directly without an LLM; the CLI and tests use it.
+The workflow produces proposals and drafts for operator review. Reroutes and vehicle moves must be applied manually in the transport system. To queue an approved notice in the simulated outbox, name its shipment, channel and message when asking the comms agent; there is no batch approval command. `run_autopilot(city, event, severity)` runs the three tools directly without an LLM; the CLI and tests use it.
 
 ```bash
 uv run cargomind autopilot Chennai --event cyclone --severity high           # direct tools, instant
@@ -698,7 +702,7 @@ uv run cargomind autopilot Chennai --event cyclone --severity high --agent   # f
 | Fleet | `fleet` | Fuel below 20% or driver hours below 1 h |
 | Hub weather | `weather` | Medium or high 24 h weather risk at one of 6 hubs. The suggested prompt runs the Disruption Autopilot |
 
-Every alert has `id`, `kind`, `severity`, `title`, `detail` and a `suggested_prompt`. A failing check is journaled and skipped, so one broken source never blinds the others. See the alerts in the dashboard's Watchtower panel, at `GET /api/alerts` / `POST /api/alerts/scan`, or with `uv run cargomind watchtower`.
+Every alert has `id`, `kind`, `severity`, `title`, `detail` and a `suggested_prompt`. Existing alerts from a failing source are retained with `stale: true` until a healthy scan updates or resolves them. Other checks continue. See the alerts in the dashboard's Watchtower panel, at `GET /api/alerts` / `POST /api/alerts/scan`, or with `uv run cargomind watchtower`.
 
 ---
 
@@ -712,7 +716,7 @@ Every alert has `id`, `kind`, `severity`, `title`, `detail` and a `suggested_pro
 | Answer pass rate | 100% |
 | Routing precision / recall / F1 (micro) | 0.950 / 1.000 / **0.974** |
 | Routing exact-set match | 94.4% |
-| Latency p50 / p95 | 0.42 s / 0.56 s |
+| Latency p50 / p95 | 0.47 s / 2.85 s |
 | Runtime errors | 0 |
 
 Every scenario reached the right specialist (recall 1.0). Precision is below 1.0 because one prompt is routed to an extra agent: the `feedback` prompt also calls `tracking_agent`. The harness caught two real rule-engine bugs, and both are fixed with regression tests: "Which" was parsed as warehouse `WH-ICH`, and "SKUs" was parsed as `SKU-S`. These numbers are for the offline rule-engine; live-model results will differ, so rerun with your keys (`--mode online`) to measure them.
@@ -979,10 +983,8 @@ If you switch between `--plain-env` and Secret Manager on an existing service an
 
 | Name | Role | GitHub |
 |---|---|---|
-| _Member 1 (fill in)_ | Agents and orchestration | `@handle` |
-| _Member 2 (fill in)_ | Self-healing and MCP | `@handle` |
-| _Member 3 (fill in)_ | Dashboard and UX | `@handle` |
-| _Member 4 (fill in, optional)_ | Data, tools and deployment | `@handle` |
+| Anand B | Core platform, agents, self-healing and dashboard | [@Anandb71](https://github.com/Anandb71) |
+| Junaid Ahamed | Disruption Autopilot, Watchtower, CLI and evaluations | [@JunaidAhamed-7777](https://github.com/JunaidAhamed-7777) |
 
 ---
 

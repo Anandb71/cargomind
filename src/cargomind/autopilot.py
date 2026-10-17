@@ -68,9 +68,21 @@ def _affected(city: str) -> list[dict[str, Any]]:
     return out
 
 
-async def _alternate_hub(city: str, max_checked: int = 3) -> dict[str, Any]:
-    """Nearest hub that is not itself at high weather risk (don't stage cargo into the next storm)."""
-    candidates = sorted((h for h in HUBS if h != city), key=lambda h: gazetteer.haversine_km(city, h))
+async def _alternate_hub(city: str, avoid: set[str] | None = None, max_checked: int = 3) -> dict[str, Any] | None:
+    """Nearest real warehouse hub that is not itself at high weather risk (don't stage cargo into the next storm).
+
+    Returns None when the network has no warehouse outside ``city``.
+    """
+    avoid = avoid or set()
+    hubs = {
+        resolved
+        for w in db.list_warehouses().get("warehouses", [])
+        if (resolved := gazetteer.resolve_city(w.get("city") or ""))
+        and resolved != city and resolved not in avoid
+    }
+    if not hubs:
+        return None
+    candidates = sorted(hubs, key=lambda h: gazetteer.haversine_km(city, h))
     skipped = []
     for hub in candidates[:max_checked]:
         try:
@@ -82,7 +94,7 @@ async def _alternate_hub(city: str, max_checked: int = 3) -> dict[str, Any]:
         skipped.append({"hub": hub, "weather_risk": risk})
     hub = candidates[0]  # every nearby hub is at high risk: nearest one, flagged for the operator
     return {"hub": hub, "km": round(gazetteer.haversine_km(city, hub), 1), "weather_risk": "high", "skipped": skipped,
-            "warning": f"All {max_checked} nearest hubs are at high weather risk; staging at {hub} needs operator review."}
+            "warning": f"All {len(skipped)} nearest hubs are at high weather risk; staging at {hub} needs operator review."}
 
 
 async def assess_disruption_impact(city: str, event: str = "disruption", severity: str = "high") -> dict:
@@ -159,15 +171,22 @@ async def propose_disruption_reroutes(city: str, event: str = "disruption", seve
         return err
     ev, sev = _norm_event(event), _norm_severity(severity)
     pick = await _alternate_hub(resolved)
+    if pick is None:
+        return {
+            "status": "error", "city": resolved, "event": ev, "severity": sev,
+            "error": f"No alternate warehouse hub is available outside {resolved}.",
+            "suggestions": ["Ask the operator to verify an alternate staging location before moving loads."],
+            "shipment_actions": [], "vehicle_moves": [], "requires_approval": True,
+        }
     alt, alt_km = pick["hub"], pick["km"]
     actions = []
     for s in _affected(resolved):
         exp = s["exposure"]
-        if "current" in exp and "destination" not in exp:
-            action = f"Stage at {alt} hub ({alt_km} km) until the {ev} clears, then resume to {s['destination_city']}"
-        elif "origin" in exp and s.get("status") in ("created", "picked_up"):
+        if "origin" in exp and s.get("status") in ("created", "picked_up"):
             action = (f"HOLD at origin until the {ev} clears" if sev == "high" and s.get("priority") != "critical"
                       else f"Depart early via {alt} before the {ev} peaks")
+        elif "current" in exp and "destination" not in exp:
+            action = f"Stage at {alt} hub ({alt_km} km) until the {ev} clears, then resume to {s['destination_city']}"
         elif "destination" in exp:
             action = f"Divert to {alt} hub ({alt_km} km) and hold for last-mile once {resolved} reopens"
         else:
@@ -230,7 +249,10 @@ async def run_autopilot(city: str, event: str = "disruption", severity: str = "h
         return impact
     reroutes = await propose_disruption_reroutes(city=city, event=event, severity=severity)
     notices = await draft_disruption_notices(city=city, event=event)
-    return {"status": "ok", "impact": impact, "reroutes": reroutes, "notices": notices}
+    result = {"status": "ok", "impact": impact, "reroutes": reroutes, "notices": notices}
+    if reroutes.get("status") == "error":
+        result.update(status="error", error=reroutes["error"], suggestions=reroutes.get("suggestions", []))
+    return result
 
 
 _AP = """You are part of CargoMind's Disruption Autopilot for an Indian 3PL network. Use tools for every
@@ -268,14 +290,19 @@ autopilot_commander = LlmAgent(
     description="Writes the incident action plan for the operator.",
     model=build_model("fast", OfflinePolicy(
         agent="autopilot_commander", title="Disruption Autopilot - Incident Action Plan", echo_context=True,
-        help_text="Approve with 'send the notices' / 'commit the reroutes', or ask me to adjust any action.",
+        help_text=(
+            "Review this plan and apply reroutes manually. To queue a notice in the simulated outbox, "
+            "approve a specific shipment's draft through comms_agent."
+        ),
     )),
     instruction="""You are the incident commander. Write the incident action plan from:
 Impact: {autopilot_impact?}
 Reroutes: {autopilot_reroutes?}
 Customer notices: {autopilot_notices?}
 Sections: Situation (1-2 lines), Exposure (numbers), Actions (numbered, owner + deadline, critical first),
-Customer comms (drafts ready, not sent), Approval needed. Nothing has been executed yet.""",
+Customer comms (drafts ready, not sent), Approval needed. Nothing has been executed yet.
+Reroutes must be applied manually. An operator can approve a specific shipment notice through
+comms_agent to queue it in the simulated outbox.""",
 )
 
 disruption_autopilot = SequentialAgent(
