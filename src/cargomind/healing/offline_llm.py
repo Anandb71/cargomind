@@ -297,8 +297,10 @@ class OfflineLlm(BaseLlm):
                 scored.append((hits, -idx, rule.tool))
         scored.sort(reverse=True)
         if scored:
-            names = [t for _, _, t in scored]
-            names = list(dict.fromkeys(names))
+            if self.policy.multi:  # fan out only to specialists that clearly match
+                top = scored[0][0]
+                scored = [s for s in scored if s[0] >= max(1, top - 1)]
+            names = list(dict.fromkeys(t for _, _, t in scored))
             return names if self.policy.multi else names[:1]
         if self.policy.default_tool and self.policy.default_tool in tools:
             return [self.policy.default_tool]
