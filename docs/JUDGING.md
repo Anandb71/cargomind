@@ -11,6 +11,8 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 > uv sync
 > uv run cargomind demo --chaos 0.3     # 8-step scenario under 30% fault injection
 > uv run cargomind web                  # http://localhost:8080
+> uv run cargomind autopilot Chennai --event cyclone   # Disruption Autopilot
+> uv run cargomind eval --mode offline  # 18-scenario eval report
 > ```
 > Add a free `GOOGLE_API_KEY` to `.env` (see the [README](../README.md#getting-the-api-keys)) to see Gemini, plus Claude or OpenAI for the cross-vendor critic.
 
@@ -18,7 +20,7 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 
 ## Tool set: Agent SDK (Google ADK 2.12)
 
-- [x] Agent graph built only from ADK primitives: `LlmAgent`, `AgentTool`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `exit_loop` and `output_key`. See [`src/cargomind/agent.py`](../src/cargomind/agent.py): `root_agent`, `dispatch_pipeline`, `ops_briefing`.
+- [x] Agent graph built only from ADK primitives: `LlmAgent`, `AgentTool`, `SequentialAgent`, `ParallelAgent`, `LoopAgent`, `exit_loop` and `output_key`. See [`src/cargomind/agent.py`](../src/cargomind/agent.py): `root_agent`, `dispatch_pipeline`, `ops_briefing`, and [`autopilot.py`](../src/cargomind/autopilot.py): `disruption_autopilot` (Sequential → Parallel → commander), 23 agents in total.
 - [x] ADK `App` with a runner-wide `BasePlugin`. See [`agent.py`](../src/cargomind/agent.py) `app`, and [`healing/plugin.py`](../src/cargomind/healing/plugin.py) `SelfHealingPlugin`.
 - [x] ADK `Runner` + `InMemorySessionService`, streaming events. See [`runtime.py`](../src/cargomind/runtime.py): `get_runner`, `stream_chat`.
 - [x] Custom ADK model classes (`BaseLlm` subclasses). See [`healing/resilient_llm.py`](../src/cargomind/healing/resilient_llm.py) `ResilientLlm`, and [`healing/offline_llm.py`](../src/cargomind/healing/offline_llm.py) `OfflineLlm`.
@@ -43,7 +45,8 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 - [x] Step-by-step setup for Windows, macOS and Linux, including PowerShell 5.1 caveats: [README setup](../README.md#full-setup-windows-macos-linux).
 - [x] Every API key, click by click: [README keys](../README.md#getting-the-api-keys).
 - [x] Every env var: [README configuration](../README.md#configuration-reference), mirroring [`config.py`](../src/cargomind/config.py).
-- [x] Every command: [README CLI](../README.md#cli-reference).
+- [x] Every command: [README CLI](../README.md#cli-reference), including `autopilot`, `watchtower` and `eval`.
+- [x] Measured, not claimed: [EVAL_REPORT.md](EVAL_REPORT.md) (offline rule-engine mode: 18/18 task success, routing F1 0.974), reproducible with `uv run cargomind eval --mode offline --out docs/EVAL_REPORT.md`.
 - [x] Dashboard, ADK UI, MCP clients, Docker, Cloud Run and troubleshooting are all documented in the README.
 - [x] Built-in self-check: `uv run cargomind doctor` ([`cli.py`](../src/cargomind/cli.py) `_doctor`).
 - [x] Architecture with sequence diagrams: [ARCHITECTURE.md](ARCHITECTURE.md). Live demo run-sheet: [DEMO_SCRIPT.md](DEMO_SCRIPT.md).
@@ -52,7 +55,7 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 
 - [x] Four tiers (`fast`, `pro`, `critic`, `vision`), each a cross-vendor chain: Gemini → Gemini backup → Claude/GPT (LiteLLM) → offline engine. See [`healing/resilient_llm.py`](../src/cargomind/healing/resilient_llm.py): `build_model`, `_make_gemini`, `_make_second_vendor`.
 - [x] **Planner and critic on different vendors.** The `critic` tier puts Claude or GPT *first*. See `build_model` (`if tier == "critic": chain.insert(0, second)`).
-- [x] Models assigned per agent role in [`agent.py`](../src/cargomind/agent.py): `build_model("pro", …)` for `dispatch_planner`, `build_model("critic", …)` for `dispatch_critic`, `build_model("vision", …)` for `vision_inspector`.
+- [x] Models assigned per agent role in [`agent.py`](../src/cargomind/agent.py): `build_model("pro", …)` for `dispatch_planner`, `build_model("critic", …)` for `dispatch_critic`, `build_model("vision", …)` for `vision_inspector`, `build_model("pro", …)` for the autopilot's `reroute_planner` ([`autopilot.py`](../src/cargomind/autopilot.py)).
 - [x] Every response is stamped with `served_by`, `fallbacks` and `tier` (`ResilientLlm.generate_content_async`) and shown in the CLI and dashboard trace.
 
 **Verify:** with `GOOGLE_API_KEY` + `ANTHROPIC_API_KEY` set, ask *"Plan today's dispatch from Mumbai"*. The trace shows the planner served by `gemini-4-argon` and the critic by `anthropic/claude-sonnet-5-5`.
@@ -62,6 +65,7 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 - [x] Conversational root agent `cargomind_concierge` with a dynamic instruction. See [`agent.py`](../src/cargomind/agent.py) `root_agent`, `concierge_instruction`.
 - [x] Session memory across turns (`InMemorySessionService`, session id per chat). *"commit the plan"* acts on a plan produced turns earlier. See [`runtime.py`](../src/cargomind/runtime.py) and [`tools/planning.py`](../src/cargomind/tools/planning.py) `commit_dispatch_plan` (reads `state["current_plan"]`).
 - [x] Clarifying questions when details are missing, and multi-specialist turns ("call several in one turn when the request spans domains").
+- [x] Proactive, not only reactive: the **Watchtower** ([`watchtower.py`](../src/cargomind/watchtower.py) `run_watchtower`, started by the web server) raises SLA, exception, stock, fleet and weather alerts, each with a `suggested_prompt` the dashboard sends to the concierge in one click (`GET /api/alerts`, `POST /api/alerts/scan`).
 - [x] Three conversational front ends: dashboard chat ([`web/server.py`](../src/cargomind/web/server.py) `POST /api/chat`), terminal (`uv run cargomind chat`) and the ADK Dev UI.
 
 **Verify:** `uv run cargomind chat`. Ask *"Plan today's dispatch from Mumbai"*, then *"commit the plan"*.
@@ -91,7 +95,7 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 
 - [x] **Agent ⇄ agent loop:** `LoopAgent(plan_critique_loop)` = `dispatch_planner` ⇄ `dispatch_critic`, exiting through `exit_loop` when valid (max 4). See [`agent.py`](../src/cargomind/agent.py). The plan revises from critic issues stored in `state["plan_issues"]`: see [`tools/planning.py`](../src/cargomind/tools/planning.py) `propose_dispatch_plan`, `validate_dispatch_plan`.
 - [x] **Human → agent loop:** dashboard thumbs/comments → `POST /api/feedback`, and the `remember_operator_feedback` tool → SQLite → `lessons()` → `render_lessons_block()`, which is injected into the concierge instruction **every turn**. See [`feedback/store.py`](../src/cargomind/feedback/store.py) and [`agent.py`](../src/cargomind/agent.py) `concierge_instruction`.
-- [x] **Human-in-the-loop gate:** the plan is applied only on *"commit the plan"* (`commit_dispatch_plan` refuses unvalidated revisions unless forced). Sends, reorders and status changes happen only when explicitly asked.
+- [x] **Human-in-the-loop gate:** the plan is applied only on *"commit the plan"* (`commit_dispatch_plan` refuses unvalidated revisions unless forced). Sends, reorders and status changes happen only when explicitly asked. The Disruption Autopilot ends in an incident action plan marked *Approval needed*; its notices are drafts (`sent: false`).
 - [x] **Tool → LLM loop:** structured errors with `suggestions` + `healing_hint` drive reflect-and-retry. See [`healing/plugin.py`](../src/cargomind/healing/plugin.py) `after_tool_callback`, `on_tool_error_callback`.
 
 **Verify:** say *"Remember: always prioritise critical pharma shipments over express ones"*. The **Lessons learned** panel updates, or check from the terminal: `uv run python -c "from cargomind.feedback.store import render_lessons_block; print(render_lessons_block())"`.
@@ -103,6 +107,7 @@ This page maps each hackathon criterion to the exact files and symbols that impl
 - [x] **L3 API fallback chains**, flagged `degraded`. See [`tools/geo.py`](../src/cargomind/tools/geo.py), [`tools/weather.py`](../src/cargomind/tools/weather.py), [`tools/vision.py`](../src/cargomind/tools/vision.py).
 - [x] **L4 MCP failover.** See [`mcp_tools.py`](../src/cargomind/mcp_tools.py) `ResilientMcpToolset`.
 - [x] **L5 Chaos Monkey + journal.** See [`healing/chaos.py`](../src/cargomind/healing/chaos.py) (`maybe_fail`, `force_fail`, `set_rate`), [`healing/journal.py`](../src/cargomind/healing/journal.py) (`record`, `subscribe`, `stats`) and [`healing/breaker.py`](../src/cargomind/healing/breaker.py). Live in the dashboard (`/api/healing/stream`, chaos slider → `POST /api/chaos`).
+- [x] Watchtower checks are isolated: a failing check is journaled as a `fault` and skipped, and the loop retries on the next interval ([`watchtower.py`](../src/cargomind/watchtower.py) `scan_once`, `run_watchtower`).
 - [x] Last line of defence: `OfflineLlm` always answers. CI proves the full scenario completes under 30% chaos.
 
 **Verify:** dashboard → Chaos Monkey 30% → *"Morning ops briefing"*. Watch `fault → retry → recovered` in the journal while the answer still arrives. For a deterministic model failover:

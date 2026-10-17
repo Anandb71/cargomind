@@ -39,6 +39,8 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 - [Demo script](#demo-script)
 - [Self-healing deep dive](#self-healing-deep-dive)
 - [Feedback loops deep dive](#feedback-loops-deep-dive)
+- [Disruption Autopilot and Watchtower](#disruption-autopilot-and-watchtower)
+- [Evaluation](#evaluation)
 - [Project structure](#project-structure)
 - [Testing and CI](#testing-and-ci)
 - [Docker](#docker)
@@ -58,9 +60,10 @@ More depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sequence diagrams), [d
 
 **CargoMind** puts the whole control tower behind one conversation:
 
-- **One concierge, many specialists.** A conversational Gemini agent sends each request to 7 specialist agents: tracking, routes and risk, inventory, dispatch, customer comms, photo inspection and the ops briefing. The graph has 17 ADK agents in total and uses every ADK workflow pattern: `LlmAgent` + `AgentTool`, `SequentialAgent`, `ParallelAgent` and `LoopAgent`.
+- **One concierge, many specialists.** A conversational Gemini agent sends each request to 8 specialist agents: tracking, routes and risk, inventory, dispatch, customer comms, photo inspection, the ops briefing and the Disruption Autopilot. The graph has 23 ADK agents in total and uses every ADK workflow pattern: `LlmAgent` + `AgentTool`, `SequentialAgent`, `ParallelAgent` and `LoopAgent`.
 - **Multi-model by design.** Gemini Flash handles conversation. Gemini Pro plans. Gemini vision inspects proof-of-delivery photos. Claude or GPT, a different vendor, critiques every dispatch plan independently. A deterministic offline rule-engine is the last link of every model chain.
 - **It checks its own work.** The dispatch planner and an independent critic run in a feedback loop. The critic checks truck capacity, driver hours, cold-chain and hazmat handling, SLA and weather. The planner revises until the plan is valid. Nothing is written to the database until you say *"commit the plan"*.
+- **It acts before you ask.** The **Watchtower** scans the network every 60 s for SLA breach risk, exceptions, low stock, fleet problems and hub weather, and turns each alert into a one-click question. For a cyclone, flood, strike or closure, the **Disruption Autopilot** assesses the impact, plans reroutes and drafts customer notices in parallel, then hands the operator an incident action plan to approve.
 - **It learns from the operator.** Thumbs up or down, comments and *"remember: always..."* are turned into lessons. Those lessons are added to the agent's instructions on every turn.
 - **It heals itself.** The system has five layers of self-healing:
   - model failover across vendors
@@ -101,7 +104,7 @@ A per-criterion checklist with file and symbol pointers is in [docs/JUDGING.md](
 flowchart TB
     subgraph IF["Interfaces"]
         WEB["Mission-control dashboard<br/>FastAPI + SSE + Leaflet"]
-        CLI["CLI<br/>chat / demo / doctor"]
+        CLI["CLI<br/>chat / demo / doctor<br/>autopilot / watchtower / eval"]
         ADKUI["ADK Dev UI<br/>adk web src"]
         EXT["External MCP clients<br/>Claude Desktop / Claude Code / Gemini CLI"]
     end
@@ -110,7 +113,8 @@ flowchart TB
         RUN["Runner + session service<br/>stream_chat event stream"]
         PLUG["SelfHealingPlugin<br/>arg repair / retries / breakers / reflect"]
         CON["cargomind_concierge<br/>conversational orchestrator"]
-        SPEC["7 specialist agents<br/>exposed as AgentTools"]
+        SPEC["8 specialist agents<br/>exposed as AgentTools"]
+        WT["Watchtower<br/>background scan every 60 s"]
     end
 
     subgraph MODELS["ResilientLlm chain - one per agent"]
@@ -139,6 +143,7 @@ flowchart TB
     MCPT -- "stdio JSON-RPC" --> MCPS --> DB
     EXT -- "stdio JSON-RPC" --> MCPS
     PLAN & COMMS & FB --> DB
+    WEB --> WT --> DB
 
     GEO --> GM["Google Routes v2 + Geocoding"] -.->|fallback| OSM["OSRM / Nominatim"] -.->|fallback| HAV["Haversine + gazetteer"]
     WX --> OM["Open-Meteo"] -.->|fallback| SEAS["Seasonal heuristic"]
@@ -157,6 +162,7 @@ flowchart LR
     CON -->|AgentTool| COM["comms_agent"]
     CON -->|AgentTool| VI["vision_inspector<br/>vision tier"]
     CON -->|AgentTool| OB
+    CON -->|AgentTool| AP
     CON -->|tool| CMT["commit_dispatch_plan"]
     CON -->|tool| REM["remember_operator_feedback"]
 
@@ -178,14 +184,24 @@ flowchart LR
         end
         FAN -->|"output_key state"| BW["briefing_writer"]
     end
+
+    subgraph AP["disruption_autopilot - SequentialAgent"]
+        direction TB
+        IA["impact_assessor"] --> MF
+        subgraph MF["mitigation_fanout - ParallelAgent"]
+            RP["reroute_planner<br/>pro tier"]
+            ND["notice_drafter<br/>drafts only"]
+        end
+        MF -->|"output_key state"| AC["autopilot_commander<br/>incident action plan"]
+    end
 ```
 
 ### Model chain (one per agent, built by `build_model(tier)`)
 
 | Tier | Used by | Chain, tried in order (links without a key are left out) |
 |---|---|---|
-| `fast` | concierge, tracking, route/risk, inventory, comms, reporter, watchers, briefing writer | `gemini-3.8-flash` → `gemini-2.5-flash` → Claude **or** GPT → `offline/rule-engine` |
-| `pro` | dispatch planner | `gemini-4-argon` → `gemini-2.5-flash` → Claude **or** GPT → `offline/rule-engine` |
+| `fast` | concierge, tracking, route/risk, inventory, comms, reporter, watchers, briefing writer, impact assessor, notice drafter, autopilot commander | `gemini-3.8-flash` → `gemini-2.5-flash` → Claude **or** GPT → `offline/rule-engine` |
+| `pro` | dispatch planner, autopilot reroute planner | `gemini-4-argon` → `gemini-2.5-flash` → Claude **or** GPT → `offline/rule-engine` |
 | `critic` | dispatch critic | **Claude or GPT first** (independent vendor) → `gemini-4-argon` → `gemini-2.5-flash` → `offline/rule-engine` |
 | `vision` | vision inspector | `CARGOMIND_GEMINI_VISION` (default: the fast model) → `gemini-2.5-flash` → Claude **or** GPT → `offline/rule-engine` |
 
@@ -199,7 +215,7 @@ Sequence diagrams for a dispatch request and a self-healing fallback are in [doc
 
 | Agent | ADK pattern | Model tier | What it does | Tools |
 |---|---|---|---|---|
-| `cargomind_concierge` | `LlmAgent` that orchestrates `AgentTool`s | fast | Conversational front door. Understands the goal, calls one or more specialists in a single turn, asks clarifying questions and applies learned lessons | 7 specialist AgentTools, `commit_dispatch_plan`, `remember_operator_feedback` |
+| `cargomind_concierge` | `LlmAgent` that orchestrates `AgentTool`s | fast | Conversational front door. Understands the goal, calls one or more specialists in a single turn, asks clarifying questions and applies learned lessons | 8 specialist AgentTools, `commit_dispatch_plan`, `remember_operator_feedback` |
 | `tracking_agent` | `LlmAgent` | fast | Status, location, history, ETA and SLA risk. Updates status only when asked | MCP: `track_shipment`, `list_shipments`, `shipment_history`, `update_shipment_status`. Native: `estimate_eta` |
 | `route_risk_agent` | `LlmAgent` | fast | Road distance and time, multi-stop optimisation, weather and disruption risk, carrier quotes | `get_route`, `optimize_multi_stop_route`, `geocode`, `get_weather_risk`, `check_route_disruptions`, `quote_carriers` |
 | `inventory_agent` | `LlmAgent` | fast | Stock levels, low-stock alerts, reorders (POs only when asked), warehouse info | MCP: `check_inventory`, `create_reorder`, `list_warehouses` |
@@ -207,6 +223,7 @@ Sequence diagrams for a dispatch request and a self-healing fallback are in [doc
 | `comms_agent` | `LlmAgent` | fast | Empathetic, specific delay or delivery notices (email, SMS, WhatsApp). Sends only after approval, to a simulated outbox | `draft_customer_notification`, `send_notification`, MCP `track_shipment` |
 | `vision_inspector` | `LlmAgent` | vision | Proof-of-delivery photo inspection: damage, severity, findings, recommended action | `inspect_delivery_photo` (Gemini multimodal, JSON output) |
 | `ops_briefing` | `SequentialAgent`[`ParallelAgent`[3 watchers], writer] | fast | Morning briefing: KPIs, weather at 6 hubs and low stock are gathered in parallel, then written up as Headline, Risks and Actions | MCP `get_kpis`, `hub_weather_sweep`, MCP `check_inventory` |
+| `disruption_autopilot` | `SequentialAgent`[impact_assessor, `ParallelAgent`[reroute_planner, notice_drafter], autopilot_commander] | fast + pro | City-level disruption (cyclone, flood, strike, bandh, closure, landslide): finds exposed shipments, vehicles and warehouses, proposes reroutes/holds via an alternate hub, drafts customer notices (never sends) and writes an incident action plan. Nothing executes until the operator approves | `assess_disruption_impact`, `propose_disruption_reroutes`, `draft_disruption_notices` |
 
 **The seeded network.** On first run CargoMind creates `data/cargomind.db` with a deterministic India-wide network. It contains 25 shipments (`SHP-1001`…`SHP-1025`, with real-world problems such as checkpost holds, monsoon delays, crushed cartons and hazmat), 5 warehouses (`WH-BOM`, `WH-DEL`, `WH-BLR`, `WH-MAA`, `WH-HYD`), 20 SKUs (some below their reorder point), 10 trucks (`TRK-101`…`TRK-110`, including a cold-chain reefer), 5 carriers (`CR-01`…`CR-05`) and a 20-city gazetteer. The gazetteer knows aliases such as *Bangalore*, *Bombay*, *Madras* and *Gurgaon*, and IATA-style codes such as `BLR` and `BOM`.
 
@@ -393,6 +410,7 @@ Every setting is an environment variable, read in [`src/cargomind/config.py`](sr
 | `CARGOMIND_HTTP_TIMEOUT` | `8` | Seconds per external HTTP call before falling back |
 | `CARGOMIND_DATA_DIR` | `./data` | Where the SQLite DB and uploaded photos live |
 | `CARGOMIND_DB` | `<data dir>/cargomind.db` | SQLite database file |
+| `CARGOMIND_WATCHTOWER` | `1` | `0`/`false`/`no`/`off` stops the dashboard from starting the Watchtower background scan |
 | `PORT` | `8080` | Dashboard port (Cloud Run sets it automatically) |
 | `HOST` | `0.0.0.0` | Dashboard bind address |
 | `LOG_LEVEL` | `info` | Uvicorn log level for the dashboard |
@@ -413,6 +431,10 @@ All commands run from the repo root with `uv run …`. They are installed as con
 | `uv run cargomind demo --chaos 0.3` | Same, with 30% of tool and model calls failing on the first try, to show self-healing |
 | `uv run cargomind mcp` | Runs the `cargomind-logistics` MCP server on stdio, for Claude Desktop or any MCP client. It waits silently for a client |
 | `uv run cargomind reset-db` | Re-seeds the demo database (shipments, fleet, stock, POs, outbox) |
+| `uv run cargomind autopilot Chennai --event cyclone --severity high` | Runs the Disruption Autopilot steps directly (impact → reroutes → notice drafts) and prints the actions. `--event`: cyclone, flood, strike, closure, … (default `cyclone`). `--severity`: `low`/`medium`/`high` (default `high`) |
+| `uv run cargomind autopilot Chennai --event cyclone --agent` | Same, but through the full multi-agent concierge (`disruption_autopilot` workflow, LLMs, self-healing, journal) |
+| `uv run cargomind watchtower` | One Watchtower scan: prints every active alert with severity, detail and the suggested question |
+| `uv run cargomind eval --mode offline --out docs/EVAL_REPORT.md` | Runs the 18-scenario eval harness and writes the report. All flags pass through to [`evals/runner.py`](src/cargomind/evals/runner.py) |
 | `uv run adk web src` | Google ADK Dev UI at http://localhost:8000. Pick **cargomind** |
 | `uv run adk run src/cargomind` | ADK's own terminal runner for the same agent |
 | `uv run cargomind-web` / `uv run cargomind-mcp` | Aliases for `cargomind web` / `cargomind mcp` |
@@ -429,6 +451,7 @@ uv run cargomind web        # http://localhost:8080   (other port: --port 8090)
 | Area | What you see and do |
 |---|---|
 | **Top bar** | Status pills showing which models and APIs are live, the network clock (IST), and the **Chaos Monkey slider** (0–60%), which injects transient faults into tool and model calls live |
+| **Watchtower** | Proactive alerts (critical first) from the background scan. Click an alert to send its suggested question to the agent, or scan on demand |
 | **Network pulse** | KPI tiles: on-time rate, delayed and critical shipments, fleet utilisation, open POs and more. Refreshes every 10 s |
 | **Shipments** | Filterable table (ID, customer, city) of the seeded network |
 | **Network map** | Leaflet + OpenStreetMap map of hubs, cities and shipment lanes, coloured by status |
@@ -449,6 +472,8 @@ uv run cargomind web        # http://localhost:8080   (other port: --port 8090)
 | `GET` | `/api/healing` | Recent journal events, stats, circuit-breaker states, chaos rate |
 | `GET` | `/api/healing/stream` | **SSE** live healing journal |
 | `GET`/`POST` | `/api/chaos` | Read or set the chaos rate (`{rate: 0.3}` or `{rate: 30}`) |
+| `GET` | `/api/alerts` | Active Watchtower alerts (`id`, `kind`, `severity`, `title`, `detail`, `suggested_prompt`, `raised_at`) |
+| `POST` | `/api/alerts/scan` | Run a Watchtower scan now; returns new and active alerts |
 | `GET` | `/api/health` | Mode, live providers, component presence, library versions |
 
 Example:
@@ -574,6 +599,7 @@ These are the same 8 prompts `uv run cargomind demo` runs, in one session. Type 
 | `Optimise a milk run from Mumbai via Pune, Surat and Ahmedabad` | Google Routes waypoint optimisation (or the OSRM / haversine fallback) |
 | `Show delayed critical shipments and draft notices for them` | A multi-domain turn: the concierge calls several specialists in one go |
 | `Reorder SKU-107 for WH-BLR` | Write action through MCP `create_reorder` |
+| `Cyclone alert in Chennai, severity high - run disruption autopilot` | The Disruption Autopilot: impact → reroutes + notice drafts in parallel → incident action plan awaiting approval |
 
 The timed, click-by-click version for presenting is in [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
@@ -644,15 +670,66 @@ uv run python -c "from cargomind.feedback.store import render_lessons_block, sta
 
 ---
 
+## Disruption Autopilot and Watchtower
+
+**Disruption Autopilot** ([`autopilot.py`](src/cargomind/autopilot.py)) handles a city-level event (cyclone, flood, strike, bandh, road closure, landslide) as one workflow. The concierge calls it as `AgentTool(disruption_autopilot)` when a message mentions *autopilot, cyclone, flood, strike, bandh, closure, disruption, landslide* or *"alert in"*.
+
+| Step | Agent | Tool | Output (`output_key`) |
+|---|---|---|---|
+| 1 | `impact_assessor` (fast) | `assess_disruption_impact` | Exposed shipments, vehicles and warehouses, plus hub weather → `autopilot_impact` |
+| 2a (parallel) | `reroute_planner` (pro) | `propose_disruption_reroutes` | Reroute / hold actions via an alternate hub, critical first, and vehicle moves out of the zone → `autopilot_reroutes` |
+| 2b (parallel) | `notice_drafter` (fast) | `draft_disruption_notices` | Customer notice **drafts** for urgent shipments (`sent: false`) → `autopilot_notices` |
+| 3 | `autopilot_commander` (fast) | – | Incident action plan: Situation, Exposure, Actions (owner + deadline), Customer comms, Approval needed |
+
+Nothing is executed. The operator approves with *"send the notices"* / *"commit the reroutes"*, or asks for changes. `run_autopilot(city, event, severity)` runs the three tools directly without an LLM; the CLI and tests use it.
+
+```bash
+uv run cargomind autopilot Chennai --event cyclone --severity high           # direct tools, instant
+uv run cargomind autopilot Chennai --event cyclone --severity high --agent   # full multi-agent workflow
+```
+
+**Watchtower** ([`watchtower.py`](src/cargomind/watchtower.py)) raises alerts before the operator asks. `uv run cargomind web` starts `run_watchtower(60)` as a background task in the server lifespan (set `CARGOMIND_WATCHTOWER=0` to disable it). Each scan (`scan_once()` → `{"new": [...], "active": [...]}`) checks:
+
+| Check | Alert kind | Raised when |
+|---|---|---|
+| SLA breach risk | `sla_risk` | ETA is later than `promised_by`, or the shipment is marked delayed (critical priority → `critical` severity) |
+| Exceptions | `exception` | Shipment status is `exception` |
+| Low stock | `low_stock` | SKU below its reorder point with no open PO |
+| Fleet | `fleet` | Fuel below 20% or driver hours below 1 h |
+| Hub weather | `weather` | Medium or high 24 h weather risk at one of 6 hubs. The suggested prompt runs the Disruption Autopilot |
+
+Every alert has `id`, `kind`, `severity`, `title`, `detail` and a `suggested_prompt`. A failing check is journaled and skipped, so one broken source never blinds the others. See the alerts in the dashboard's Watchtower panel, at `GET /api/alerts` / `POST /api/alerts/scan`, or with `uv run cargomind watchtower`.
+
+---
+
+## Evaluation
+
+`uv run cargomind eval --mode offline --out docs/EVAL_REPORT.md` runs 18 scenarios (one fresh session each) through the real agent graph and scores routing, answer content, latency and healing events. Latest run, in **offline rule-engine mode** (no API keys, chaos 0%, in-process MCP). Full report: [docs/EVAL_REPORT.md](docs/EVAL_REPORT.md).
+
+| Metric | Value |
+|---|---|
+| Task success | **18/18 (100%)** |
+| Answer pass rate | 100% |
+| Routing precision / recall / F1 (micro) | 0.950 / 1.000 / **0.974** |
+| Routing exact-set match | 94.4% |
+| Latency p50 / p95 | 0.42 s / 0.56 s |
+| Runtime errors | 0 |
+
+Every scenario reached the right specialist (recall 1.0). Precision is below 1.0 because one prompt is routed to an extra agent: the `feedback` prompt also calls `tracking_agent`. The harness caught two real rule-engine bugs, and both are fixed with regression tests: "Which" was parsed as warehouse `WH-ICH`, and "SKUs" was parsed as `SKU-S`. These numbers are for the offline rule-engine; live-model results will differ, so rerun with your keys (`--mode online`) to measure them.
+
+---
+
 ## Project structure
 
 ```text
 cargomind/
 ├── src/cargomind/
 │   ├── __init__.py              # exposes `app` / `root_agent` lazily, so `adk web src` finds the agent
-│   ├── agent.py                 # the agent graph: concierge + 7 specialists (17 ADK agents), App + plugin
+│   ├── agent.py                 # the agent graph: concierge + 8 specialists (23 ADK agents), App + plugin
+│   ├── autopilot.py             # Disruption Autopilot: impact -> parallel reroutes + notice drafts -> action plan
+│   ├── watchtower.py            # proactive monitor: SLA, exception, stock, fleet and weather alerts
 │   ├── runtime.py               # ADK Runner, sessions, stream_chat() merging agent + healing events
-│   ├── cli.py                   # `cargomind` command: chat / demo / web / mcp / doctor / reset-db
+│   ├── cli.py                   # `cargomind` command: chat / demo / web / mcp / doctor / reset-db / autopilot / watchtower / eval
 │   ├── config.py                # every env var, model ids, key detection, mode summary
 │   ├── mcp_tools.py             # ResilientMcpToolset: MCP client with in-process failover
 │   ├── data/
@@ -673,13 +750,16 @@ cargomind/
 │   │   ├── breaker.py           # circuit breakers
 │   │   ├── chaos.py             # Chaos Monkey fault injection
 │   │   └── journal.py           # healing journal: ring buffer + SQLite + pub/sub
+│   ├── evals/
+│   │   ├── scenarios.py         # 18 eval scenarios with expected routing and answer checks
+│   │   └── runner.py            # eval harness -> docs/EVAL_REPORT.md
 │   ├── feedback/
 │   │   └── store.py             # ratings, preferences, lessons learned, remember_operator_feedback
 │   └── web/
-│       ├── server.py            # FastAPI: REST + SSE chat / healing stream
+│       ├── server.py            # FastAPI: REST + SSE chat / healing stream / alerts; starts the Watchtower
 │       └── static/              # no-build dashboard (HTML/CSS/JS, Leaflet)
-├── tests/                       # pytest suite (data, MCP server, healing, feedback, offline LLM, ...)
-├── docs/                        # ARCHITECTURE.md, JUDGING.md, DEMO_SCRIPT.md, CONTRACTS.md
+├── tests/                       # pytest suite (data, MCP server, healing, feedback, offline LLM, autopilot, ...)
+├── docs/                        # ARCHITECTURE.md, JUDGING.md, DEMO_SCRIPT.md, CONTRACTS.md, EVAL_REPORT.md
 ├── deploy/
 │   ├── cloudrun.sh              # one-command Cloud Run deploy (Secret Manager aware)
 │   └── claude_desktop_config.example.json
@@ -887,7 +967,7 @@ If you switch between `--plain-env` and Secret Manager on an existing service an
 
 - **Real integrations:** carrier and TMS APIs, India's e-way bill and ULIP data, live GPS telematics in place of the seeded fleet.
 - **Managed persistence:** Firestore or Cloud SQL for operations data, sessions and the healing journal, so the system can scale beyond one instance.
-- **Vertex AI Agent Engine** deployment and `adk eval` regression suites for the agents.
+- **Vertex AI Agent Engine** deployment, and live-model runs of the eval harness in CI.
 - **Optimisation:** an OR-Tools VRP solver behind `propose_dispatch_plan`, with time windows and cold-chain constraints.
 - **Learning:** embedding-based retrieval of past feedback and incidents, plus per-operator preference profiles.
 - **A2A protocol** so carrier and warehouse partners' agents can negotiate directly with CargoMind.
