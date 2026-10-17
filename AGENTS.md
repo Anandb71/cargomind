@@ -69,6 +69,7 @@ Contracts between modules: `docs/CONTRACTS.md`.
 - On Windows always set `PYTHONUTF8=1` when printing agent output (₹, ⇄ in text).
 
 ## Status log
+- Map cache refresh (2026-10-17): versioned the dashboard script URL after confirming production serves the keyless Esri basemap. Reopening the dashboard now fetches the replacement script instead of a cached CARTO version; no browser-facing API key is required.
 - Final integration: PRs #1–#6 merged; full hermetic suite 106 passed. Weather-aware staging rejects unknown/high-risk hubs; basemap and cache fixes included.
 - 2026-10-17 (release review): PRs #1–#4 merged after 100 tests, offline 18/18 and 30%-chaos 18/18 evaluations.
   Public Vercel demo: https://cargomind-lilac.vercel.app; live SSE tracking verified with Gemini backup/OpenAI fallback.
