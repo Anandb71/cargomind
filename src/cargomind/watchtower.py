@@ -99,7 +99,7 @@ async def _weather_alerts() -> tuple[list[dict], set[str]]:
             lvl = r.get("risk_level")
             if r.get("status") == "error" or lvl not in ("low", "medium", "high"):
                 raise ValueError(r.get("error") or "Weather risk unavailable")
-        except Exception as exc:  # weather down → retain the previous city alert until a healthy scan
+        except Exception as exc:  # noqa: BLE001 - weather down → retain the previous city alert until a healthy scan
             log.debug("watchtower weather %s failed: %s", city, exc)
             return None, f"wx:{city}"
         if lvl not in ("high", "medium"):
@@ -123,7 +123,7 @@ async def scan_once() -> dict[str, list[dict]]:
     ):
         try:
             found.extend(check())
-        except Exception as exc:  # one broken check must not blind the others
+        except Exception as exc:  # noqa: BLE001 - one broken check must not blind the others
             journal.record("fault", f"watchtower:{check.__name__}", str(exc), action="skipped check")
             failed_ids.update(i for i in _active if i.startswith(prefixes))
     weather_alerts, failed_weather_ids = await _weather_alerts()
@@ -154,6 +154,6 @@ async def run_watchtower(interval_s: float = 60) -> None:
                 log.info("watchtower: %d new alert(s), %d active", len(r["new"]), len(r["active"]))
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the monitor must outlive any single bad scan
             journal.record("fault", "watchtower", str(exc), action="retry next interval")
         await asyncio.sleep(interval_s)

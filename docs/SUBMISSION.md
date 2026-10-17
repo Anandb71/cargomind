@@ -29,7 +29,7 @@ Dispatch assignments require an explicit commit. Autopilot notices are drafts; n
 
 | Check | Result |
 |---|---|
-| Automated tests | **100 passed** |
+| Automated tests | **106 passed** |
 | Offline scenarios, 0% chaos | **18/18 passed**; routing F1 **0.974** |
 | Offline scenarios, 30% chaos | **18/18 passed** |
 | Journal in the 30% chaos run | **14 fault events, 12 retry events and 12 recovered events** |

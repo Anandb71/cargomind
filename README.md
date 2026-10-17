@@ -24,7 +24,7 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 
 ---
 
-**Judge fast path:** [90-second demo](docs/DEMO_SCRIPT.md) · [criterion-by-criterion evidence](docs/JUDGING.md) · [reproducible eval report](docs/EVAL_REPORT.md). Verified: **100 tests pass**, **18/18 offline scenarios succeed**, routing **F1 0.974**. The timed demo uses the offline engine; live provider usage is visible in the trace.
+**Judge fast path:** [90-second demo](docs/DEMO_SCRIPT.md) · [criterion-by-criterion evidence](docs/JUDGING.md) · [reproducible eval report](docs/EVAL_REPORT.md). Verified: **106 tests pass**, **18/18 offline scenarios succeed**, routing **F1 0.974**. The timed demo uses the offline engine; live provider usage is visible in the trace.
 
 **Resilience evidence:** [30% chaos eval](docs/EVAL_CHAOS_REPORT.md) also completed **18/18 scenarios**, with **14 injected faults**, **12 retries** and **12 recorded recoveries**. Both eval runs use the offline model and in-process MCP; CI separately exercises stdio MCP and Docker.
 

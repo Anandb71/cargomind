@@ -65,10 +65,11 @@ Contracts between modules: `docs/CONTRACTS.md`.
 - Anthropic key → **"API key is not scoped to a workspace"** (400). Needs a workspace-scoped key from console.anthropic.com,
   else critic falls through to OpenAI. ResilientLlm now treats quota/auth errors as permanent: no retry, breaker trips at once.
 - Google **Geocoding API not enabled** on the Maps key → Nominatim fallback (Routes API works).
-- Tests: 100 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
+- Tests: 106 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
 - On Windows always set `PYTHONUTF8=1` when printing agent output (₹, ⇄ in text).
 
 ## Status log
+- Final integration: PRs #1–#6 merged; full hermetic suite 106 passed. Weather-aware staging rejects unknown/high-risk hubs; basemap and cache fixes included.
 - 2026-10-17 (release review): PRs #1–#4 merged after 100 tests, offline 18/18 and 30%-chaos 18/18 evaluations.
   Public Vercel demo: https://cargomind-lilac.vercel.app; live SSE tracking verified with Gemini backup/OpenAI fallback.
   Vercel entrypoint app.py uses temporary instance-local data; background Watchtower is disabled, manual scans work.
@@ -78,7 +79,17 @@ Contracts between modules: `docs/CONTRACTS.md`.
   flood, strike, bandh, closure, disruption, "alert in", landslide), CLI `autopilot` / `watchtower` / `eval`.
   Offline fixes: SKU regex needs a digit ("SKUs" was parsed as SKU-S); single-city weather → get_weather_risk instead of
   two-city check_route_disruptions; event/severity arg extraction. Created local `.env` with PASTE_* placeholders.
-  PRs: Anandb71/cargomind#1 (autopilot+watchtower) ← #2 (CLI + offline fixes, stacked on #1) ← #3 (docs/eval/live fixes).
+  Offline eval 18/18 (also fixed "Which" → WH-ICH regex, table cap dropping `status`). Live smoke run done (above).
+  PR stack (each based on the previous): Anandb71/cargomind#1 autopilot+watchtower ← #2 CLI + offline fixes ←
+  #3 eval 18/18 + handoff notes ← #4 README/docs ← #5 weather-aware staging hub + live findings ←
+  #6 keyless Esri basemap (CARTO `dark_all` now returns HTTP-200 "API KEY REQUIRED" tiles, so `tileerror` never fires)
+  + `/static` sent with `Cache-Control: no-cache`. PR #6 contains no screenshots or README changes.
+  Teammate merges the stack bottom-up (#1 into main first; GitHub retargets the next PR when its base branch is deleted).
+- Optional screenshot recipe (screenshots remain a TODO): Playwright via `uv run --no-project --with playwright python shot.py` using the installed Edge
+  (`chromium.launch(channel="msedge")`), so no browser download; the dev server is in `.claude/launch.json` (port 8099).
+- PR #6 review milestone: completed Esri attribution with the GIS user community credit, matching both service
+  metadata responses; base and reference India tiles returned HTTP 200 without credentials. Corrected PR scope to
+  basemap/cache restoration only; screenshots are not included. No autopilot or deployment behavior changed.
 
 ## NEXT STEPS / TODO (update as you go)
 1. User authorized merging PRs #1–#4. Review hardening verified: real warehouse alternatives, outbound HOLD precedence,
@@ -89,3 +100,5 @@ Contracts between modules: `docs/CONTRACTS.md`.
 4. Optional: Cloud Run deploy (`deploy/cloudrun.sh`; needs user `gcloud auth login` + project with billing).
 5. Repo is public and team names are filled from confirmed GitHub collaborators: Anand B (@Anandb71), Junaid Ahamed
    (@JunaidAhamed-7777). Submit the Google Form (user does this). Use docs/DEMO_SCRIPT.md for the 90-second judge path.
+
+- PR #5 review fix (2026-10-17): alternate staging checks real warehouse cities and accepts only confirmed low/medium weather risk; unavailable/high-risk alternatives produce a soft error with no movements. Main review fixes retained. Targeted autopilot/watchtower tests: 28 passed (offline/local MCP).
