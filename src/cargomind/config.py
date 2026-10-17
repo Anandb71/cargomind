@@ -1,5 +1,4 @@
-"""Central settings for CargoMind. Everything is env-driven so judges can run
-the whole system with zero keys (offline mode) or with real Google APIs."""
+"""Central settings: OpenAI operational agents, optional Maps, or offline mode."""
 from __future__ import annotations
 
 import os
@@ -12,7 +11,9 @@ ROOT_DIR = PACKAGE_DIR.parent.parent
 load_dotenv(ROOT_DIR / ".env")
 load_dotenv(PACKAGE_DIR / ".env")  # adk web also reads this one
 
-DATA_DIR = Path(os.getenv("CARGOMIND_DATA_DIR", ROOT_DIR / "data"))
+# A fresh namespace avoids reusing legacy demo databases containing contact fields.
+# Existing databases remain untouched; explicit DB paths require operational-only input.
+DATA_DIR = Path(os.getenv("CARGOMIND_DATA_DIR", ROOT_DIR / "data" / "operational-v1"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = Path(os.getenv("CARGOMIND_DB", DATA_DIR / "cargomind.db"))
 UPLOAD_DIR = DATA_DIR / "uploads"
@@ -57,6 +58,19 @@ GEMINI_VISION = os.getenv("CARGOMIND_GEMINI_VISION", GEMINI_FAST)
 CLAUDE_MODEL = os.getenv("CARGOMIND_CLAUDE_MODEL", "anthropic/claude-sonnet-5-5")
 OPENAI_MODEL = os.getenv("CARGOMIND_OPENAI_MODEL", "openai/gpt-5-mini")
 
+# Native Responses API is required for GPT-6.1 tool calls. Legacy multi-provider
+# chains remain an explicit opt-in for installations with working Google quotas.
+PROVIDER = os.getenv("CARGOMIND_PROVIDER", "openai").strip().lower()
+if PROVIDER not in ("openai", "multi"):
+    raise ValueError("CARGOMIND_PROVIDER must be openai or multi")
+OPENAI_FAST = os.getenv("CARGOMIND_OPENAI_FAST", "gpt-6-luna")
+OPENAI_PRO = os.getenv("CARGOMIND_OPENAI_PRO", "gpt-6.1-sol")
+OPENAI_CRITIC = os.getenv("CARGOMIND_OPENAI_CRITIC", "gpt-6.1-sol")
+OPENAI_VISION = os.getenv("CARGOMIND_OPENAI_VISION", OPENAI_FAST)
+OPENAI_FALLBACK = os.getenv("CARGOMIND_OPENAI_FALLBACK", OPENAI_MODEL).removeprefix("openai/")
+OPENAI_TIMEOUT_S = min(120.0, max(1.0, float(os.getenv("CARGOMIND_OPENAI_TIMEOUT", "45"))))
+OPENAI_MAX_OUTPUT_TOKENS = min(16384, max(128, int(os.getenv("CARGOMIND_OPENAI_MAX_OUTPUT_TOKENS", "4096"))))
+
 FORCE_OFFLINE = os.getenv("CARGOMIND_OFFLINE", "false").lower() in ("1", "true")
 # Google's hosted Maps MCP server (Grounding Lite): search_places / lookup_weather / compute_routes
 GOOGLE_MAPS_MCP_URL = os.getenv("CARGOMIND_GOOGLE_MAPS_MCP_URL", "https://mapstools.googleapis.com/mcp")
@@ -76,15 +90,17 @@ os.environ.setdefault("PYTHONUTF8", "1")  # LiteLLM on Windows
 
 
 def online_gemini() -> bool:
-    return bool((GOOGLE_API_KEY or USE_VERTEX) and not FORCE_OFFLINE)
+    return bool(PROVIDER == "multi" and (GOOGLE_API_KEY or USE_VERTEX) and not FORCE_OFFLINE)
 
 
 def mode_summary() -> dict:
     return {
+        "provider": PROVIDER,
         "gemini": online_gemini(),
-        "claude": bool(ANTHROPIC_API_KEY and not FORCE_OFFLINE),
+        "claude": bool(PROVIDER == "multi" and ANTHROPIC_API_KEY and not FORCE_OFFLINE),
         "openai": bool(OPENAI_API_KEY and not FORCE_OFFLINE),
         "google_maps": bool(GOOGLE_MAPS_API_KEY and not FORCE_OFFLINE),
         "offline_fallback": True,
-        "models": {"fast": GEMINI_FAST, "pro": GEMINI_PRO, "vision": GEMINI_VISION, "backup": GEMINI_BACKUP, "claude": CLAUDE_MODEL, "openai": OPENAI_MODEL},
+        "models": ({"fast": OPENAI_FAST, "pro": OPENAI_PRO, "critic": OPENAI_CRITIC, "vision": OPENAI_VISION, "backup": OPENAI_FALLBACK, "openai": OPENAI_FALLBACK}
+                   if PROVIDER == "openai" else {"fast": GEMINI_FAST, "pro": GEMINI_PRO, "critic": CLAUDE_MODEL, "vision": GEMINI_VISION, "backup": GEMINI_BACKUP, "claude": CLAUDE_MODEL, "openai": OPENAI_MODEL}),
     }

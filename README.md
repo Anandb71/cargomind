@@ -5,7 +5,7 @@
 # CargoMind
 
 **A self-healing, multi-model, multi-agent logistics control tower.**
-Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lane, truck or SKU in an India-wide 3PL network. It plans, checks its own work and keeps answering when models, APIs or servers fail.
+Built on Google ADK, OpenAI GPT-6.1 Sol / GPT-6 Luna, Google Maps and MCP. Ask it about any shipment, lane, truck or SKU in an India-wide 3PL network. It plans, checks its own work and keeps answering when models, APIs or servers fail. The previous Gemini/Anthropic chain remains available with `CARGOMIND_PROVIDER=multi`.
 
 ### ▶ [Open the live demo](https://cargomind-lilac.vercel.app) · [Run it locally in 60 s](#quickstart) · [Criteria → proof](#how-cargomind-meets-the-judging-criteria) · [See it in action](#see-it-in-action) · [Submission overview](docs/SUBMISSION.md)
 
@@ -38,6 +38,13 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 **Judge fast path:** [90-second demo](docs/DEMO_SCRIPT.md) · [criterion-by-criterion evidence](docs/JUDGING.md) · [reproducible eval report](docs/EVAL_REPORT.md). Verified: **106 tests pass**, **18/18 offline scenarios succeed**, routing **F1 0.974**. The timed demo uses the offline engine; live provider usage is visible in the trace.
 
 **Resilience evidence:** [30% chaos eval](docs/EVAL_CHAOS_REPORT.md) also completed **18/18 scenarios**, with **14 injected faults**, **12 retries** and **12 recorded recoveries**. Both eval runs use the offline model and in-process MCP; CI separately exercises stdio MCP and Docker.
+
+
+## Simulation readiness
+
+Open **`/simulation`** on the running server for a configurable logistics graph, explicit multi-agent handoffs, independently verified route decisions, and a forged-output rejection demo. The interface accepts operational IDs and numeric constraints; personal/contact fields are rejected. Proposals remain read-only.
+
+Run `uv run cargomind simulate --input scenario.json` or POST a scenario to `/api/simulation/run`. See [simulation schema and protocol](docs/SIMULATION.md), [evaluation method](docs/EVALS.md), and [raw-count benchmark report](docs/SIMULATION_BENCHMARK.md). The protocol is custom JSON handoff 1.0 over JSON-RPC 2.0; existing ADK agents invoke the same optimizer. Deterministic routing scores are distinct from LLM hallucination measurements.
 
 ## Contents
 

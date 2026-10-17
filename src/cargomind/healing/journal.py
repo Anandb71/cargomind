@@ -20,6 +20,7 @@ from collections import Counter, deque
 from typing import Any
 
 from cargomind import config
+from cargomind.safety.privacy import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +81,8 @@ def _get_conn() -> sqlite3.Connection | None:
         conn.executescript(_SCHEMA)
         conn.commit()
         _conn = conn
-    except Exception:
-        logger.exception("healing journal: sqlite unavailable, memory-only mode")
+    except Exception:  # noqa: BLE001 - journal failures must not expose exception contents
+        logger.warning("healing journal: sqlite unavailable, memory-only mode")
         _db_disabled = True
     return _conn
 
@@ -107,8 +108,8 @@ def _persist(event: dict[str, Any]) -> None:
                 ),
             )
             conn.commit()
-        except Exception:
-            logger.warning("healing journal: failed to persist event", exc_info=True)
+        except Exception:  # noqa: BLE001 - journal failures must not expose exception contents
+            logger.warning("healing journal: failed to persist event")
 
 
 # -------------------------------------------------------------------- fan-out
@@ -169,7 +170,7 @@ def record(
       The event dict ``{id, ts, kind, component, detail, action, outcome}``.
     """
     global _failed
-    event = {
+    event = sanitize({
         "id": uuid.uuid4().hex[:12],
         "ts": round(time.time(), 3),
         "kind": str(kind),
@@ -177,7 +178,7 @@ def record(
         "detail": str(detail or "")[:1000],
         "action": str(action or ""),
         "outcome": str(outcome or ""),
-    }
+    })
     with _lock:
         _ring.append(event)
         _counts[event["kind"]] += 1
@@ -192,8 +193,8 @@ def record(
     _persist(event)
     try:
         _fan_out(event)
-    except Exception:
-        logger.warning("healing journal: fan-out failed", exc_info=True)
+    except Exception:  # noqa: BLE001 - journal failures must not expose exception contents
+        logger.warning("healing journal: fan-out failed")
     return event
 
 
@@ -226,7 +227,7 @@ def recent(limit: int = 50) -> list[dict[str, Any]]:
     with _lock:
         items = list(_ring)
     items.reverse()
-    return [dict(e) for e in items[: max(0, int(limit))]]
+    return sanitize([dict(e) for e in items[: max(0, int(limit))]])
 
 
 def history(limit: int = 200) -> list[dict[str, Any]]:
@@ -241,11 +242,11 @@ def history(limit: int = 200) -> list[dict[str, Any]]:
                 " FROM healing_events ORDER BY ts DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
-        except Exception:
-            logger.warning("healing journal: history query failed", exc_info=True)
+        except Exception:  # noqa: BLE001 - journal failures must not expose exception contents
+            logger.warning("healing journal: history query failed")
             return recent(limit)
     keys = ("id", "ts", "kind", "component", "detail", "action", "outcome")
-    return [dict(zip(keys, row)) for row in rows]
+    return sanitize([dict(zip(keys, row)) for row in rows])
 
 
 def stats() -> dict[str, Any]:
@@ -288,4 +289,4 @@ def clear(persisted: bool = False) -> None:
 
 def to_json(event: dict[str, Any]) -> str:
     """Serialises an event for SSE/websocket streaming."""
-    return json.dumps(event, ensure_ascii=False)
+    return json.dumps(sanitize(event), ensure_ascii=False)

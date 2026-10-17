@@ -1,7 +1,8 @@
-"""ResilientLlm: a cross-provider, self-healing model chain for ADK agents.
+"""ResilientLlm: a self-healing model chain for ADK agents.
 
 Each agent gets a ``ResilientLlm`` whose ``chain`` is tried in order, e.g.
-``Gemini -> Claude/GPT (LiteLLM) -> OfflineLlm``. Per candidate:
+``OpenAI Responses tier -> OpenAI backup -> OfflineLlm``. An explicit
+``CARGOMIND_PROVIDER=multi`` retains the legacy vendor chain. Per candidate:
 
 * skipped while its circuit breaker is open (the last link is never skipped);
 * chaos may inject a transient fault (never into the offline engine);
@@ -170,8 +171,8 @@ class ResilientLlm(BaseLlm):
                                         outcome="recovered",
                                     )
                             meta = dict(response.custom_metadata or {})
+                            meta.setdefault("served_by", candidate.model)
                             meta.update(
-                                served_by=candidate.model,
                                 fallbacks=fallbacks,
                                 tier=self.tier,
                             )
@@ -314,14 +315,28 @@ def build_model(tier: str = "fast", policy: Any = None) -> ResilientLlm:
       policy: ``OfflinePolicy`` for the final rule-engine link.
 
     Returns:
-      ``ResilientLlm`` whose chain is Gemini tier model + Gemini backup (if
-      online and different) + second vendor (if a key is set; FIRST for
-      ``critic`` so the critic is independent of the planner) + ``OfflineLlm``
-      (always the last element of ``.chain``).
+      OpenAI tier + OpenAI backup + ``OfflineLlm`` by default. Legacy ``multi``
+      mode uses Gemini plus cross-provider fallback, with the critic vendor
+      first. The deterministic offline link is always last.
     """
     if tier not in _TIER_GEMINI:
         raise ValueError(f"unknown tier {tier!r}; expected one of {TIERS}")
     chain: list[BaseLlm] = []
+    if config.PROVIDER == "openai":
+        if config.OPENAI_API_KEY and not config.FORCE_OFFLINE:
+            from cargomind.healing.openai_responses import OpenAIResponsesLlm
+
+            primary = {"fast": config.OPENAI_FAST, "pro": config.OPENAI_PRO,
+                       "critic": config.OPENAI_CRITIC, "vision": config.OPENAI_VISION}[tier].removeprefix("openai/")
+            for model_id in dict.fromkeys((primary, config.OPENAI_FALLBACK.removeprefix("openai/"))):
+                chain.append(OpenAIResponsesLlm(
+                    model="openai/" + model_id,
+                    reasoning_effort="none" if model_id == "gpt-6-luna" else "low",
+                    timeout_seconds=config.OPENAI_TIMEOUT_S,
+                    max_output_tokens=config.OPENAI_MAX_OUTPUT_TOKENS,
+                ))
+        chain.append(_make_offline(policy))
+        return ResilientLlm(chain=chain, tier=tier)
     if config.online_gemini():
         primary = _TIER_GEMINI[tier]()
         chain.append(_make_gemini(primary))

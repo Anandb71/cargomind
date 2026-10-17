@@ -13,6 +13,7 @@ dependencies = [
     "httpx>=0.28.1",
     "litellm>=1.105.1",
     "mcp[cli]>=2.3.0",
+    "openai>=2.54.0",
     "pillow>=13.0.0",
     "python-dotenv>=1.2.4",
     "uvicorn[standard]>=0.54.0",

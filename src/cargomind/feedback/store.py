@@ -14,6 +14,7 @@ import time
 from typing import Any
 
 from cargomind import config
+from cargomind.safety.privacy import REFUSAL, inspect_input, sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -97,13 +98,16 @@ def add_feedback(
     Returns:
       The stored row as a dict.
     """
+    verdict = inspect_input("\n".join((str(comment or ""), str(message or ""))))
+    if not verdict["allowed"]:
+        return {"status": "error", "error": REFUSAL, "stored": False, "reasons": verdict["reasons"]}
     row = {
         "ts": round(time.time(), 3),
-        "session_id": str(session_id or ""),
+        "session_id": sanitize(str(session_id or "")),
         "rating": _sign(rating),
-        "comment": _norm(comment)[:500],
-        "message": str(message or "")[:4000],
-        "agent": str(agent or ""),
+        "comment": sanitize(_norm(comment))[:500],
+        "message": sanitize(str(message or ""))[:4000],
+        "agent": sanitize(str(agent or "")),
     }
     with _lock:
         conn = _db()
@@ -126,7 +130,7 @@ def recent_feedback(limit: int = 50) -> list[dict[str, Any]]:
             (int(limit),),
         ).fetchall()
     keys = ("id", "ts", "session_id", "rating", "comment", "message", "agent")
-    return [dict(zip(keys, r)) for r in rows]
+    return sanitize([dict(zip(keys, r)) for r in rows])
 
 
 # ---------------------------------------------------------------- preferences
@@ -135,6 +139,9 @@ def set_preference(key: str, value: str) -> None:
     key = _norm(key)
     if not key:
         raise ValueError("preference key must not be empty")
+    if not inspect_input(f"{key} {value}")["allowed"]:
+        raise ValueError(REFUSAL)
+    key, value = sanitize(key), sanitize(_norm(value))
     with _lock:
         conn = _db()
         conn.execute(
@@ -152,7 +159,7 @@ def get_preferences() -> dict[str, str]:
         rows = _db().execute(
             "SELECT key, value FROM preferences ORDER BY updated_at DESC, key"
         ).fetchall()
-    return {k: v for k, v in rows}
+    return {sanitize(k): sanitize(v) for k, v in rows if inspect_input(f"{k} {v}")["allowed"]}
 
 
 def delete_preference(key: str) -> bool:
@@ -175,6 +182,9 @@ def lessons(limit: int = 8) -> list[str]:
     seen: set[str] = set()
 
     def add(line: str, key: str) -> None:
+        if not inspect_input(line)["allowed"]:
+            return
+        line, key = sanitize(line), sanitize(key)
         k = key.lower()
         if k and k not in seen and len(out) < limit:
             seen.add(k)
@@ -203,8 +213,8 @@ def render_lessons_block(limit: int = 8) -> str:
     """Markdown block for agent instructions, or "" when nothing was learned."""
     try:
         items = lessons(limit)
-    except Exception:
-        logger.warning("feedback: could not load lessons", exc_info=True)
+    except Exception:  # noqa: BLE001 - feedback failures must not log private exception contents
+        logger.warning("feedback: could not load lessons")
         return ""
     if not items:
         return ""
@@ -266,6 +276,10 @@ def remember_operator_feedback(feedback: str, rating: int = -1) -> dict:
     text = _norm(feedback)
     if not text:
         return {"status": "error", "error": "feedback text is empty", "suggestions": ["Pass the operator's words in `feedback`."]}
+    verdict = inspect_input(text)
+    if not verdict["allowed"]:
+        return {"status": "error", "error": REFUSAL, "stored": False, "reasons": verdict["reasons"]}
+    text = verdict["text"]
     try:
         add_feedback("operator-tool", rating, comment=text, agent="remember_operator_feedback")
         pref_key = None
@@ -273,8 +287,8 @@ def remember_operator_feedback(feedback: str, rating: int = -1) -> dict:
             pref_key = _rule_key(text)
             set_preference(pref_key, text)
         active = len(lessons())
-    except sqlite3.Error as exc:
-        return {"status": "error", "error": f"could not store feedback: {exc}"}
+    except (sqlite3.Error, ValueError):
+        return {"status": "error", "error": "Could not store feedback safely."}
     return {
         "status": "ok",
         "stored": True,
