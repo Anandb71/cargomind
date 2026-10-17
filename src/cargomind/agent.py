@@ -89,8 +89,8 @@ route_risk_agent = LlmAgent(
         rules=[
             R(tool="quote_carriers", keywords=["quote", "carrier", "cost", "price", "cheapest", "rate"]),
             R(tool="optimize_multi_stop_route", keywords=["multi-stop", "multi stop", "stops", "optimize", "optimise", "milk run"]),
-            R(tool="check_route_disruptions", keywords=["risk on", "risk along", "risk between", "route risk", "disruption", "weather on", "safe to", "→", "->"]),
-            R(tool="get_weather_risk", keywords=["weather", "rain", "storm", "monsoon", "fog"]),
+            R(tool="check_route_disruptions", min_cities=2, keywords=["risk", "weather", "rain", "storm", "monsoon", "fog", "disruption", "safe to"]),
+            R(tool="get_weather_risk", keywords=["risk", "weather", "rain", "storm", "monsoon", "fog", "disruption", "safe to"]),
             R(tool="get_route", keywords=["route", "distance", "how far", "drive", "travel time", "→", "->", " to "]),
             R(tool="geocode", keywords=["coordinates", "geocode", "lat"]),
         ],
