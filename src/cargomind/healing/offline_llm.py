@@ -104,6 +104,12 @@ def _extract(name: str, ptype: str, text: str, cities: list[str]) -> Any:
     if low == "status":
         t = text.lower().replace(" ", "_")
         return next((s for s in _STATUSES if s in t), None)
+    if low == "event":
+        m = re.search(r"\b(cyclone|flood\w*|strike|bandh|closure|landslide|heat ?wave|fog|storm|earthquake|fire)\b", text, re.I)
+        return m.group(1).lower() if m else None
+    if low == "severity":
+        m = re.search(r"\b(?:severity\W+(low|medium|high)|(low|medium|high)\W+severity)\b", text, re.I)
+        return (m.group(1) or m.group(2)).lower() if m else None
     if low == "reason":
         m = re.search(r"(?:for|about|because of|due to)\s+(.+)$", text, re.I)
         return m.group(1).strip(" .?") if m else "delay"

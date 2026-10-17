@@ -19,6 +19,7 @@ from google.adk.apps import App
 from google.adk.tools import AgentTool, exit_loop
 
 from cargomind import config
+from cargomind.autopilot import disruption_autopilot
 from cargomind.feedback.store import remember_operator_feedback, render_lessons_block
 from cargomind.healing.offline_llm import OfflinePolicy, OfflineRule as R
 from cargomind.healing.plugin import SelfHealingPlugin
@@ -244,7 +245,8 @@ You are **CargoMind Concierge**, the conversational front door of the logistics 
 Understand the operator's goal, delegate to the right specialist tool(s) - call several in one turn
 when the request spans domains - then answer with a clear, actionable summary.
 Specialists: tracking_agent, route_risk_agent, inventory_agent, dispatch_pipeline, comms_agent,
-vision_inspector (photos: pass the image_ref), ops_briefing.
+vision_inspector (photos: pass the image_ref), ops_briefing,
+disruption_autopilot (city-level cyclone/flood/strike/closure: pass city, event and severity).
 - 'commit the plan' → commit_dispatch_plan (only after the operator confirms).
 - When the operator corrects you or states a lasting preference → remember_operator_feedback.
 - Ask a short clarifying question only if a required detail is missing.
@@ -254,6 +256,7 @@ vision_inspector (photos: pass the image_ref), ops_briefing.
 ROUTER_RULES = [
     R(tool="remember_operator_feedback", keywords=["remember", "from now on", "always ", "never ", "you were wrong", "that's wrong", "prefer "]),
     R(tool="commit_dispatch_plan", keywords=["commit the plan", "apply the plan", "approve plan", "commit plan"]),
+    R(tool="disruption_autopilot", keywords=["autopilot", "cyclone", "flood", "strike", "bandh", "closure", "disruption", "alert in", "landslide"]),
     R(tool="ops_briefing", keywords=["briefing", "morning", "overview", "summary of the network", "how are we doing", "daily report"]),
     R(tool="dispatch_pipeline", keywords=["dispatch", "assign vehicles", "plan today", "allocate trucks", "load plan"]),
     R(tool="vision_inspector", keywords=["photo", "image", "picture", "damage", ".jpg", ".png", "inspect"]),
@@ -273,7 +276,7 @@ root_agent = LlmAgent(
             "- *Where is SHP-1003?*\n- *Plan today's dispatch from Mumbai*\n"
             "- *Any weather risk on Mumbai → Pune?*\n- *Which SKUs need reordering?*\n"
             "- *Quote carriers Delhi → Bengaluru 800kg express*\n- *Draft a delay notice for SHP-1007*\n"
-            "- *Morning ops briefing*"
+            "- *Morning ops briefing*\n- *Cyclone alert in Chennai - run disruption autopilot*"
         ),
     )),
     instruction=concierge_instruction,
@@ -285,6 +288,7 @@ root_agent = LlmAgent(
         AgentTool(agent=comms_agent),
         AgentTool(agent=vision_inspector),
         AgentTool(agent=ops_briefing),
+        AgentTool(agent=disruption_autopilot),
         planning.commit_dispatch_plan,
         remember_operator_feedback,
     ],
