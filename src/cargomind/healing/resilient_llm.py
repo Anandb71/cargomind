@@ -186,6 +186,11 @@ class ResilientLlm(BaseLlm):
                         # Part of this model's turn already reached the caller.
                         raise
                     error = exc
+                    if _is_permanent(exc):
+                        # quota exhausted / bad key: retrying wastes seconds - trip the breaker now
+                        for _ in range(int(getattr(config, "BREAKER_THRESHOLD", 3))):
+                            breaker.failure()
+                        break
                     if attempt + 1 < max_attempts and chaos.is_transient(exc):
                         delay = self.retry_backoff[attempt]
                         journal.record(
@@ -247,35 +252,52 @@ _TIER_GEMINI = {
 }
 
 
+_PERMANENT_MARKERS = (
+    "resource_exhausted", "quota", "api key", "api_key", "not scoped", "permission_denied",
+    "permission denied", "invalid x-api-key", "authentication", "unauthorized", "billing",
+    "model not found", "not_found", "does not exist",
+)
+
+
+def _is_permanent(exc: BaseException) -> bool:
+    """Errors a retry cannot fix (quota exhausted, bad/unscoped key, unknown model)."""
+    text = f"{type(exc).__name__} {exc}".lower()
+    return any(m in text for m in _PERMANENT_MARKERS)
+
+
 def _make_gemini(model_id: str) -> BaseLlm:
     from google.adk.models.google_llm import Gemini
 
     kwargs: dict[str, Any] = {"model": model_id}
     if "retry_options" in Gemini.model_fields:
-        kwargs["retry_options"] = types.HttpRetryOptions(attempts=2)
+        kwargs["retry_options"] = types.HttpRetryOptions(attempts=1)  # ResilientLlm owns retries
     return Gemini(**kwargs)
 
 
-def _make_second_vendor() -> BaseLlm | None:
-    """Claude if ANTHROPIC_API_KEY, else GPT if OPENAI_API_KEY (via LiteLLM)."""
+def _make_second_vendors() -> list[BaseLlm]:
+    """Every configured non-Google vendor (Claude, then GPT) via LiteLLM."""
     if config.FORCE_OFFLINE:
-        return None
-    model_id = (
-        config.CLAUDE_MODEL
-        if config.ANTHROPIC_API_KEY
-        else config.OPENAI_MODEL
-        if config.OPENAI_API_KEY
-        else None
-    )
-    if not model_id:
-        return None
-    try:
-        from google.adk.models.lite_llm import LiteLlm
+        return []
+    ids = []
+    if config.ANTHROPIC_API_KEY:
+        ids.append(config.CLAUDE_MODEL)
+    if config.OPENAI_API_KEY:
+        ids.append(config.OPENAI_MODEL)
+    out: list[BaseLlm] = []
+    for model_id in ids:
+        try:
+            from google.adk.models.lite_llm import LiteLlm
 
-        return LiteLlm(model=model_id)
-    except Exception:
-        logger.warning("Could not build LiteLlm(%s); skipping second vendor", model_id, exc_info=True)
-        return None
+            out.append(LiteLlm(model=model_id))
+        except Exception:
+            logger.warning("Could not build LiteLlm(%s); skipping", model_id, exc_info=True)
+    return out
+
+
+def _make_second_vendor() -> BaseLlm | None:
+    """Back-compat: first configured second vendor."""
+    vendors = _make_second_vendors()
+    return vendors[0] if vendors else None
 
 
 def _make_offline(policy: Any) -> BaseLlm:
@@ -306,11 +328,10 @@ def build_model(tier: str = "fast", policy: Any = None) -> ResilientLlm:
         backup = getattr(config, "GEMINI_BACKUP", None)
         if backup and backup != primary:
             chain.append(_make_gemini(backup))
-    second = _make_second_vendor()
-    if second is not None:
-        if tier == "critic":
-            chain.insert(0, second)
-        else:
-            chain.append(second)
+    seconds = _make_second_vendors()
+    if tier == "critic":
+        chain[0:0] = seconds  # independent vendor(s) judge the Gemini planner
+    else:
+        chain.extend(seconds)
     chain.append(_make_offline(policy))
     return ResilientLlm(chain=chain, tier=tier)

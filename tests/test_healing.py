@@ -204,7 +204,7 @@ def test_fallback_order_restore_and_metadata():
     assert k.count("fallback") == 2 and k[-1] == "recovered"
     fb = [e for e in journal.recent() if e["kind"] == "fallback"]
     assert {e["action"] for e in fb} == {"→ claude-b", "→ offline/rule-engine"}
-    assert get_breaker("model:gemini-a").failures == 1
+    assert get_breaker("model:gemini-a").state == "open"  # bad key = permanent -> breaker trips at once
 
 
 def test_transient_error_retried_in_place_before_fallback():
@@ -277,7 +277,7 @@ def test_build_model_chains(monkeypatch):
 
     fast = build_model("fast", policy)
     assert [m.model for m in fast.chain] == ["gem-fast", "gem-backup", "offline/rule-engine"]
-    assert isinstance(fast.chain[0], Gemini) and fast.chain[0].retry_options.attempts == 2
+    assert isinstance(fast.chain[0], Gemini) and fast.chain[0].retry_options.attempts == 1  # ResilientLlm owns retries
     assert isinstance(fast.chain[-1], OfflineLlm) and fast.chain[-1].policy.agent == "tester"
 
     monkeypatch.setattr(config, "GEMINI_BACKUP", "gem-pro")  # same as tier model: no dup
