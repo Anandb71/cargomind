@@ -85,7 +85,18 @@ app = FastAPI(
     description="Multi-agent logistics mission control (Google ADK + MCP + self-healing).",
     lifespan=_lifespan,
 )
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+class _RevalidatingStaticFiles(StaticFiles):
+    """Static files that always revalidate (ETag/304), so an update never runs stale JS/CSS."""
+
+    def file_response(self, *args, **kwargs) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
+app.mount("/static", _RevalidatingStaticFiles(directory=STATIC_DIR), name="static")
 
 
 # ---------------------------------------------------------------------------

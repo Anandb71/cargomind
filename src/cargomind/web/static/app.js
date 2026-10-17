@@ -489,11 +489,13 @@
     const map = L.map('map', { zoomControl: false, minZoom: 3, maxZoom: 13, zoomSnap: 0.25, worldCopyJump: true })
       .setView([21.5, 79.5], 5);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
-    const tiles = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    // Esri dark-gray canvas: keyless (CARTO basemaps now serve "API KEY REQUIRED" placeholder tiles).
+    const esri = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas';
+    const tiles = L.tileLayer(`${esri}/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}`, {
+      maxZoom: 16,
+      attribution: 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors',
     }).addTo(map);
+    L.tileLayer(`${esri}/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}`, { maxZoom: 16, pane: 'shadowPane' }).addTo(map);
     let tileErrors = 0;
     tiles.on('tileerror', () => { if (++tileErrors >= 6) $('#map-offline').hidden = false; });
     tiles.on('tileload', () => { tileErrors = 0; $('#map-offline').hidden = true; });
