@@ -65,10 +65,11 @@ Contracts between modules: `docs/CONTRACTS.md`.
 - Anthropic key → **"API key is not scoped to a workspace"** (400). Needs a workspace-scoped key from console.anthropic.com,
   else critic falls through to OpenAI. ResilientLlm now treats quota/auth errors as permanent: no retry, breaker trips at once.
 - Google **Geocoding API not enabled** on the Maps key → Nominatim fallback (Routes API works).
-- Tests: 106 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
+- Tests: 108 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
 - On Windows always set `PYTHONUTF8=1` when printing agent output (₹, ⇄ in text).
 
 ## Status log
+- Pitch demo check (2026-10-17): hosted tracking completed in 22s and Chennai cyclone proposals/notices in 75s without stream errors. Local zero-key backup verified tracking, dispatch, cyclone response and a forced tool fault/retry/recovery. Fixed offline dispatch reports retaining a revision-1 critic verdict after a newer validation; 108 tests pass, including real ADK context-fencing regressions.
 - Map cache refresh (2026-10-17): versioned the dashboard script URL after confirming production serves the keyless Esri basemap. Reopening the dashboard now fetches the replacement script instead of a cached CARTO version; no browser-facing API key is required.
 - Final integration: PRs #1–#6 merged; full hermetic suite 106 passed. Weather-aware staging rejects unknown/high-risk hubs; basemap and cache fixes included.
 - 2026-10-17 (release review): PRs #1–#4 merged after 100 tests, offline 18/18 and 30%-chaos 18/18 evaluations.

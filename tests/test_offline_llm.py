@@ -88,3 +88,50 @@ def test_which_is_not_a_warehouse_id_and_tables_keep_status():
         assert re.search(pat, t, re.I).group(1).upper() == "BLR"
     rows = [{"id": "SHP-1", **{f"c{i}": i for i in range(8)}, "status": "delayed"}]
     assert "delayed" in _table(rows) and "status" in _table(rows).splitlines()[0]
+
+
+def _dispatch_report_context():
+    """Use ADK's real sibling-event fencing, including Python-literal tool results."""
+    from google.adk.events import Event
+    from google.adk.flows.llm_flows.context._fencing import _present_other_agent_message
+
+    def context(author, part):
+        event = Event(author=author, content=types.Content(role="model", parts=[part]))
+        return _present_other_agent_message(event).content
+
+    contents = [
+        _user("Plan today's dispatch"),
+        context("dispatch_critic", types.Part(text="Old critic verdict: revision 1 invalid, score 19.")),
+        context("dispatch_planner", types.Part(text="Revision 2: constraint-aware re-plan.")),
+        context("dispatch_critic", types.Part(function_call=types.FunctionCall(name="validate_dispatch_plan", args={}))),
+        context("dispatch_critic", types.Part(function_response=types.FunctionResponse(
+            name="validate_dispatch_plan", response={"revision": 2, "valid": True, "score": 85, "blockers": 0}))),
+        context("dispatch_critic", types.Part(function_call=types.FunctionCall(name="exit_loop", args={}))),
+        context("dispatch_critic", types.Part(function_response=types.FunctionResponse(name="exit_loop", response={}))),
+    ]
+    return contents, context
+
+
+def test_brief_uses_latest_validation_instead_of_stale_critic_narration():
+    llm = OfflineLlm(policy=OfflinePolicy(title="Dispatch Plan", echo_context=True))
+    contents, _ = _dispatch_report_context()
+
+    text = llm._respond(_req(contents)).content.parts[0].text
+
+    assert "Revision 2: constraint-aware re-plan." in text
+    assert "**revision**: 2" in text and "**valid**: True" in text
+    assert "**score**: 85" in text
+    assert "Old critic verdict" not in text and "score 19" not in text
+
+
+def test_brief_keeps_narration_that_follows_latest_tool_result():
+    llm = OfflineLlm(policy=OfflinePolicy(title="Dispatch Plan", echo_context=True))
+    contents, context = _dispatch_report_context()
+    verdict = "Revision 2 is validated; one weather warning remains for operator review."
+    contents.append(context("dispatch_critic", types.Part(text=verdict)))
+
+    text = llm._respond(_req(contents)).content.parts[0].text
+
+    assert verdict in text
+    assert "Revision 2: constraint-aware re-plan." in text
+    assert "Old critic verdict" not in text
