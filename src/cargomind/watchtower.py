@@ -94,7 +94,7 @@ async def _weather_alerts() -> list[dict]:
     async def one(city: str) -> dict | None:
         try:
             r = await asyncio.wait_for(weather.get_weather_risk(city=city, hours_ahead=24), timeout=8)
-        except Exception as exc:  # weather down → skip, the next scan retries
+        except Exception as exc:  # noqa: BLE001 - weather down → skip, the next scan retries
             log.debug("watchtower weather %s failed: %s", city, exc)
             return None
         lvl = r.get("risk_level")
@@ -113,7 +113,7 @@ async def scan_once() -> dict[str, list[dict]]:
     for check in (_shipment_alerts, _stock_alerts, _fleet_alerts):
         try:
             found.extend(check())
-        except Exception as exc:  # one broken check must not blind the others
+        except Exception as exc:  # noqa: BLE001 - one broken check must not blind the others
             journal.record("fault", f"watchtower:{check.__name__}", str(exc), action="skipped check")
     found.extend(await _weather_alerts())
     current = {a["id"]: a for a in found}
@@ -140,6 +140,6 @@ async def run_watchtower(interval_s: float = 60) -> None:
                 log.info("watchtower: %d new alert(s), %d active", len(r["new"]), len(r["active"]))
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - the monitor must outlive any single bad scan
             journal.record("fault", "watchtower", str(exc), action="retry next interval")
         await asyncio.sleep(interval_s)

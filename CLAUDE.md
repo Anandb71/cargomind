@@ -65,7 +65,13 @@ Contracts between modules: `docs/CONTRACTS.md`.
 - Anthropic key → **"API key is not scoped to a workspace"** (400). Needs a workspace-scoped key from console.anthropic.com,
   else critic falls through to OpenAI. ResilientLlm now treats quota/auth errors as permanent: no retry, breaker trips at once.
 - Google **Geocoding API not enabled** on the Maps key → Nominatim fallback (Routes API works).
-- Tests: 76 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
+- Session-2 live run (all 4 vendors live): doctor ~30s OK; `cargomind autopilot Chennai --agent` 70s, concierge routed to
+  disruption_autopilot correctly; `gemini-4-argon` AND `gemini-3.8-flash` hit 429 under autopilot load → breakers opened,
+  `gemini-3.6-flash` served the rest (Claude/OpenAI not needed, so the Anthropic key fix is still unverified).
+  Web: /api/health all 6 components true; /api/alerts 18 alerts; /api/alerts/scan 0.1s. Fix from this run: autopilot
+  staged cargo at Bengaluru while Watchtower flagged high weather there → `_alternate_hub` now skips hubs at high risk.
+  Gemini quota: enable billing / raise quota on the key's project for pro + fast tiers.
+- Tests: 79 passed (hermetic: `CARGOMIND_OFFLINE=1 CARGOMIND_MCP_LOCAL=1 PYTHONUTF8=1 uv run pytest -q`).
 - On Windows always set `PYTHONUTF8=1` when printing agent output (₹, ⇄ in text).
 
 ## Status log
@@ -74,12 +80,14 @@ Contracts between modules: `docs/CONTRACTS.md`.
   flood, strike, bandh, closure, disruption, "alert in", landslide), CLI `autopilot` / `watchtower` / `eval`.
   Offline fixes: SKU regex needs a digit ("SKUs" was parsed as SKU-S); single-city weather → get_weather_risk instead of
   two-city check_route_disruptions; event/severity arg extraction. Created local `.env` with PASTE_* placeholders.
-  PRs: Anandb71/cargomind#1 (autopilot+watchtower) ← #2 (CLI + offline fixes, stacked on #1) ← #3 (docs/eval/live fixes).
+  Offline eval 18/18 (also fixed "Which" → WH-ICH regex, table cap dropping `status`). Live smoke run done (above).
+  PR stack (each based on the previous): Anandb71/cargomind#1 autopilot+watchtower ← #2 CLI + offline fixes ←
+  #3 eval 18/18 + handoff notes ← #4 README/docs ← #5 weather-aware staging hub + live findings.
 
 ## NEXT STEPS / TODO (update as you go)
-1. Merge the PR stack in order (#1 → #2 → #3) once the user OKs; re-run hermetic pytest + offline eval on main.
-2. Live run with real keys (`cargomind doctor`, `cargomind autopilot Chennai --agent`, `cargomind web`): record per-step
-   served_by/fallbacks above. Google Maps MCP may need "Maps Grounding Lite" API enabled (degrades gracefully).
+1. Merge the PR stack in order (#1 → #5) once the user OKs; re-run hermetic pytest + offline eval on main.
+2. Live-verify the Claude critic path (force it: `CARGOMIND_CHAOS` or a Gemini outage) to confirm the Anthropic key
+   works now; `cargomind eval --mode online` for live numbers in README. Google Maps MCP may need "Maps Grounding Lite".
 3. Screenshots of dashboard → `assets/screenshots/`, embed in README.
 4. Optional: Cloud Run deploy (`deploy/cloudrun.sh`; needs user `gcloud auth login` + project with billing).
 5. Before submission: make repo public (`gh repo edit Anandb71/cargomind --visibility public --accept-visibility-change-consequences`),

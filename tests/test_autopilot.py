@@ -22,6 +22,30 @@ def test_autopilot_end_to_end_offline():
     assert all(d["priority"] in ("critical", "express") for d in r["notices"]["drafts"])
 
 
+def _fake_weather(high: set[str]):
+    async def get_weather_risk(city: str, hours_ahead: int = 24) -> dict:
+        return {"city": city, "risk_level": "high" if city in high else "low"}
+
+    return get_weather_risk
+
+
+def test_reroute_skips_staging_hub_at_high_weather_risk(monkeypatch):
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", _fake_weather({"Bengaluru"}))
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai", "cyclone", "high"))
+    assert r["alternate_hub"] not in ("Chennai", "Bengaluru")
+    assert r["alternate_hub_weather"] == "low"
+    assert r["hubs_skipped_for_weather"] == [{"hub": "Bengaluru", "weather_risk": "high"}]
+    assert all("Bengaluru hub" not in a["action"] for a in r["shipment_actions"])
+    assert "warning" not in r
+
+
+def test_reroute_warns_when_every_nearby_hub_is_stormy(monkeypatch):
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", _fake_weather(set(autopilot.HUBS)))
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai", "cyclone", "high"))
+    assert r["alternate_hub"] == "Bengaluru"  # nearest, but flagged for the operator
+    assert r["alternate_hub_weather"] == "high" and "operator review" in r["warning"]
+
+
 def test_autopilot_unknown_city_is_soft_error():
     r = asyncio.run(autopilot.assess_disruption_impact("Atlantis"))
     assert r["status"] == "error" and "Chennai" in r["suggestions"]
