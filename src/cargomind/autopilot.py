@@ -13,13 +13,15 @@ offline (rule-engine LLM) and under chaos (tools call ``maybe_fail`` and the plu
 """
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from google.adk.agents import LlmAgent, ParallelAgent, SequentialAgent
 
 from cargomind.data import db, gazetteer
 from cargomind.healing.chaos import maybe_fail
-from cargomind.healing.offline_llm import OfflinePolicy, OfflineRule as R
+from cargomind.healing.offline_llm import OfflinePolicy
+from cargomind.healing.offline_llm import OfflineRule as R
 from cargomind.healing.resilient_llm import build_model
 from cargomind.tools import comms, weather
 
@@ -66,17 +68,32 @@ def _affected(city: str) -> list[dict[str, Any]]:
     return out
 
 
-def _alternate_hub(city: str, avoid: set[str]) -> tuple[str, float] | None:
+async def _alternate_hub(city: str, avoid: set[str] | None = None, max_checked: int = 3) -> dict[str, Any] | None:
+    """Nearest real warehouse hub with confirmed low or medium weather risk.
+
+    Returns None when no checked warehouse has a confirmed suitable weather risk.
+    """
+    avoid = avoid or set()
     hubs = {
         resolved
         for w in db.list_warehouses().get("warehouses", [])
         if (resolved := gazetteer.resolve_city(w.get("city") or ""))
         and resolved != city and resolved not in avoid
     }
-    best = min(hubs, key=lambda h: gazetteer.haversine_km(city, h), default=None)
-    if best is None:
+    if not hubs:
         return None
-    return best, round(gazetteer.haversine_km(city, best), 1)
+    candidates = sorted(hubs, key=lambda h: gazetteer.haversine_km(city, h))
+    skipped = []
+    for hub in candidates[:max_checked]:
+        try:
+            result = await asyncio.wait_for(weather.get_weather_risk(city=hub, hours_ahead=48), timeout=8)
+            risk = result.get("risk_level") if result.get("status") != "error" else "unknown"
+        except Exception:  # noqa: BLE001 - try another warehouse when weather is unavailable
+            risk = "unknown"
+        if risk in ("low", "medium"):
+            return {"hub": hub, "km": round(gazetteer.haversine_km(city, hub), 1), "weather_risk": risk, "skipped": skipped}
+        skipped.append({"hub": hub, "weather_risk": risk})
+    return None
 
 
 async def assess_disruption_impact(city: str, event: str = "disruption", severity: str = "high") -> dict:
@@ -106,7 +123,7 @@ async def assess_disruption_impact(city: str, event: str = "disruption", severit
     try:
         wx = await weather.get_weather_risk(city=resolved, hours_ahead=48)
         wx = {k: wx.get(k) for k in ("risk_level", "summary", "source", "degraded")}
-    except Exception as exc:  # weather is context, not a blocker
+    except Exception as exc:  # noqa: BLE001 - weather is context, not a blocker
         wx = {"risk_level": "unknown", "summary": f"weather unavailable: {exc}", "degraded": True}
     critical = [s for s in ships if s.get("priority") == "critical"]
     return {
@@ -135,7 +152,7 @@ async def propose_disruption_reroutes(city: str, event: str = "disruption", seve
     """Propose a mitigation action for every shipment exposed to a city-level disruption.
 
     Step 2a of the Disruption Autopilot. Outbound loads are held (high severity) or departed early,
-    inbound loads are diverted to the nearest unaffected hub, loads stuck in the city are staged
+    inbound loads are diverted to the nearest hub that is not itself at high weather risk, loads stuck in the city are staged
     at the alternate hub, and vehicles in the zone are moved out. Nothing is applied: the operator
     approves the plan first.
 
@@ -152,15 +169,15 @@ async def propose_disruption_reroutes(city: str, event: str = "disruption", seve
     if err:
         return err
     ev, sev = _norm_event(event), _norm_severity(severity)
-    alternate = _alternate_hub(resolved, set())
-    if alternate is None:
+    pick = await _alternate_hub(resolved)
+    if pick is None:
         return {
             "status": "error", "city": resolved, "event": ev, "severity": sev,
-            "error": f"No alternate warehouse hub is available outside {resolved}.",
+            "error": f"No alternate warehouse hub with confirmed low or medium weather risk is available outside {resolved}.",
             "suggestions": ["Ask the operator to verify an alternate staging location before moving loads."],
             "shipment_actions": [], "vehicle_moves": [], "requires_approval": True,
         }
-    alt, alt_km = alternate
+    alt, alt_km = pick["hub"], pick["km"]
     actions = []
     for s in _affected(resolved):
         exp = s["exposure"]
@@ -181,9 +198,13 @@ async def propose_disruption_reroutes(city: str, event: str = "disruption", seve
         {"vehicle_id": v["id"], "action": f"Move to {alt} staging yard" if v.get("status") != "maintenance" else "Secure in depot"}
         for v in db.list_vehicles().get("vehicles", []) if v.get("current_city") == resolved
     ]
-    return {"status": "ok", "city": resolved, "event": ev, "severity": sev, "alternate_hub": alt,
-            "alternate_hub_km": alt_km, "shipment_actions": actions, "vehicle_moves": moves,
-            "requires_approval": True}
+    out = {"status": "ok", "city": resolved, "event": ev, "severity": sev, "alternate_hub": alt,
+           "alternate_hub_km": alt_km, "alternate_hub_weather": pick["weather_risk"],
+           "hubs_skipped_for_weather": pick["skipped"], "shipment_actions": actions, "vehicle_moves": moves,
+           "requires_approval": True}
+    if pick.get("warning"):
+        out["warning"] = pick["warning"]
+    return out
 
 
 async def draft_disruption_notices(city: str, event: str = "disruption", channel: str = "email") -> dict:

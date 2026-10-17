@@ -27,6 +27,60 @@ def test_autopilot_end_to_end_offline():
     assert all(d["priority"] in ("critical", "express") for d in r["notices"]["drafts"])
 
 
+def _fake_weather(high: set[str]):
+    async def get_weather_risk(city: str, hours_ahead: int = 24) -> dict:
+        return {"city": city, "risk_level": "high" if city in high else "low"}
+
+    return get_weather_risk
+
+
+def test_reroute_skips_staging_hub_at_high_weather_risk(monkeypatch):
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", _fake_weather({"Bengaluru"}))
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai", "cyclone", "high"))
+    assert r["alternate_hub"] not in ("Chennai", "Bengaluru")
+    assert r["alternate_hub_weather"] == "low"
+    assert r["hubs_skipped_for_weather"] == [{"hub": "Bengaluru", "weather_risk": "high"}]
+    assert all("Bengaluru hub" not in a["action"] for a in r["shipment_actions"])
+    assert "warning" not in r
+
+
+def test_reroute_refuses_when_every_nearby_hub_is_stormy(monkeypatch):
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", _fake_weather(set(autopilot.HUBS)))
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai", "cyclone", "high"))
+    assert r["status"] == "error"
+    assert r["shipment_actions"] == [] and r["vehicle_moves"] == []
+    assert "confirmed low or medium weather risk" in r["error"]
+
+
+@pytest.mark.parametrize("failure", [TimeoutError(), {"status": "error"}, {"risk_level": "unknown"}])
+def test_reroute_skips_unknown_weather_for_confirmed_warehouse(monkeypatch, failure):
+    async def risk(city, hours_ahead):
+        if city == "Bengaluru":
+            if isinstance(failure, Exception):
+                raise failure
+            return failure
+        return {"status": "ok", "risk_level": "low"}
+
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", risk)
+    monkeypatch.setattr(autopilot.db, "list_warehouses", lambda: {"warehouses": [
+        {"city": "Chennai"}, {"city": "Bengaluru"}, {"city": "Hyderabad"},
+    ]})
+    r = asyncio.run(autopilot.propose_disruption_reroutes("Chennai"))
+    assert r["alternate_hub"] == "Hyderabad"
+    assert r["alternate_hub_weather"] == "low"
+
+
+def test_reroute_returns_soft_error_when_all_weather_is_unknown(monkeypatch):
+    async def risk(city, hours_ahead):
+        return {"status": "error", "error": "provider unavailable"}
+
+    monkeypatch.setattr(autopilot.weather, "get_weather_risk", risk)
+    r = asyncio.run(autopilot.run_autopilot("Chennai"))
+    assert r["status"] == "error"
+    assert r["reroutes"]["shipment_actions"] == []
+    assert r["reroutes"]["vehicle_moves"] == []
+
+
 def test_autopilot_unknown_city_is_soft_error():
     r = asyncio.run(autopilot.assess_disruption_impact("Atlantis"))
     assert r["status"] == "error" and "Chennai" in r["suggestions"]
