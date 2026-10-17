@@ -44,7 +44,7 @@ _ID_PATTERNS = {
     "order": (r"\bORD[-_\s]?(\d{3,5})\b", "ORD-{}"),
     "vehicle": (r"\bTRK[-_\s]?(\d{2,4})\b", "TRK-{}"),
     "warehouse": (r"\bWH[-_\s]?([A-Za-z]{3})\b", "WH-{}"),
-    "sku": (r"\bSKU[-_\s]?([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b", "SKU-{}"),
+    "sku": (r"\bSKU[-_\s]?(\d[A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)\b", "SKU-{}"),  # digit first: "SKUs" is not an id
     "carrier": (r"\bCR[-_\s]?(\d{1,3})\b", "CR-{}"),
 }
 _STATUSES = ["out_for_delivery", "in_transit", "picked_up", "delivered", "delayed", "exception", "created"]

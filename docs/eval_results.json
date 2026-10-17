@@ -1,0 +1,709 @@
+{
+  "summary": {
+    "scenarios": 18,
+    "succeeded": 16,
+    "success_rate": 0.889,
+    "answer_pass_rate": 0.889,
+    "routing_precision": 0.95,
+    "routing_recall": 1.0,
+    "routing_f1": 0.974,
+    "routing_macro_f1": 0.982,
+    "routing_exact_rate": 0.944,
+    "latency_p50_s": 0.419,
+    "latency_p95_s": 0.537,
+    "latency_mean_s": 0.433,
+    "errors": 0,
+    "healing_events": 1,
+    "healing_by_kind": {
+      "reflect": 1
+    },
+    "fallbacks": 0,
+    "faults_injected": 0,
+    "served_by": {
+      "offline/rule-engine": 18
+    },
+    "chaos_rate": 0.0,
+    "journal": {
+      "total": 1,
+      "by_kind": {
+        "fault": 0,
+        "retry": 0,
+        "fallback": 0,
+        "breaker_open": 0,
+        "breaker_close": 0,
+        "arg_repair": 0,
+        "reflect": 1,
+        "recovered": 0
+      },
+      "recovered": 0,
+      "failed": 0,
+      "recovery_rate": null
+    },
+    "recovery_rate": null
+  },
+  "scenarios": [
+    {
+      "id": "track_basic",
+      "category": "tracking",
+      "prompt": "Where is SHP-1003?",
+      "pattern": "AgentTool -> tracking_agent -> MCP track_shipment + estimate_eta",
+      "expected": [
+        "tracking_agent"
+      ],
+      "routed": [
+        "tracking_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.479,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Shipment Tracking\n**track shipment**\n- **id**: SHP-1003\n- **order id**: ORD-5003\n- **customer**: Joshi Medical Supplies\n- **origin city**: Delhi\n- **destination city**: Jaipur\n- **status**: delayed\n- **priority**: critical\n- **weight kg**: 105.8\n- **carrier id**: CR-01\n- **eta**: 2026-10-17T22:21:41+05:30\n- **promised by**: 2026-10-17T17:37:16+05:30\n- **last update**: 2026-10-17T12:38:59+05:30\n- **last city**: Gurugram\n- **notes**: Held at Shahjahanpur checkpost: e-way bill mismatch\n- **contents**: Surgical gloves & PPE kits\n- **carrier name**: SwiftHaul Express\n- **is late**: True\n- **delay hours**: 4.7\n- **hours to promise**: 4.0\n- **distance km**: 306.0\n**recent events**:\n| id | shipment id | ts | status | city | note | source |\n|---|---|---|---|---|---|---|\n| 9 | SHP-1003 | 2026-10-16T21:28:52+05:30 | created | Delhi | Order ORD-5003 booked; manifest generated | seed |\n| 10 | SHP-1003 | 2026-10-17T01:16:24+05:30 | picked_up | Delhi | Picked up from Delhi dock; 17 packages scanned | seed |\n| 11 | SHP-1003 | 2026-10-17T05:03:55+05:30 | in_transit | Delhi | Departed Delhi hub with SwiftHaul Express | seed |\n| 12 | SHP-1003 | 2026-10-17T08:51:27+05:30 | in_transit | Gurugram | Crossed Gurugram checkpoint | seed |\n| 13 | SHP-1003 | 2026-10-17T12:38:59+05:30 | delayed | Gurugram | Held at Shahjahanpur checkpost: e-way bill mismatch | seed |\n\n**estimate eta**\n- **status**: ok\n- **shipment id**: SHP-1003\n- **shipment status**: delayed\n- **priority**: critical\n- **from city**: Gurugram\n- **destination**: Jaipur\n- **remaining km**: 263.6\n- **eta**: 2026-10-17T21:28:47+05:30\n- **eta human**: Sat 17 Oct, 21:28 IST\n- **recorded eta**: 2026-10-17T22:21:41+05:30\n- **promised by**: 2026-10-17T17:37:16+05:30\n- **slack hours**: -3.9\n- **sla risk**: high\n**breakdown**: drive_hours=5.9; rest_hours=0.0; team_drivers=True; handling_hours=2.0; weather_buffer_hours=0.0\n- **weather risk**: low\n- **weather summary**: Low risk along the route: proceed as planned.\n- **route source**: haversine_estimate\n- **degraded**: True\n- **recommendation**: Expected 3.9 h late: notify the customer now; consider team drivers or an express carrier.",
+      "tool_calls": [
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "Where is SHP-1003?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "track_arg_repair",
+      "category": "tracking",
+      "prompt": "shp 1001 status",
+      "pattern": "sloppy ID -> arg normalisation (SHP-1001)",
+      "expected": [
+        "tracking_agent"
+      ],
+      "routed": [
+        "tracking_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.436,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Shipment Tracking\n**track shipment**\n- **id**: SHP-1001\n- **order id**: ORD-5001\n- **customer**: Menon Healthcare LLP\n- **origin city**: Mumbai\n- **destination city**: Delhi\n- **status**: in_transit\n- **priority**: critical\n- **weight kg**: 340.0\n- **carrier id**: CR-01\n- **vehicle id**: TRK-103\n- **eta**: 2026-10-18T06:20:44+05:30\n- **promised by**: 2026-10-18T07:50:44+05:30\n- **last update**: 2026-10-17T12:19:43+05:30\n- **last city**: Indore\n- **notes**: Cold chain 2-8C; temperature logger attached\n- **contents**: Insulin pens (cold chain)\n- **carrier name**: SwiftHaul Express\n- **is late**: False\n- **delay hours**: 0.0\n- **hours to promise**: 18.2\n- **distance km**: 1,493.0\n**recent events**:\n| id | shipment id | ts | status | city | note | source |\n|---|---|---|---|---|---|---|\n| 1 | SHP-1001 | 2026-10-16T18:20:00+05:30 | created | Mumbai | Order ORD-5001 booked; manifest generated | seed |\n| 2 | SHP-1001 | 2026-10-17T00:19:54+05:30 | picked_up | Mumbai | Picked up from Mumbai dock; 13 packages scanned | seed |\n| 3 | SHP-1001 | 2026-10-17T06:19:49+05:30 | in_transit | Mumbai | Departed Mumbai hub with SwiftHaul Express | seed |\n| 4 | SHP-1001 | 2026-10-17T12:19:43+05:30 | in_transit | Indore | Crossed Indore checkpoint | seed |\n**vehicle**: id=TRK-103; type=32ft SXL container; driver_name=Mohammed Irfan; driver_phone=+91 954620 46930; current_city=Indore; refrigerated=True\n\n**estimate eta**\n- **status**: ok\n- **shipment id**: SHP-1001\n- **shipment status**: in_transit\n- **priority**: critical\n- **from city**: Indore\n- **destination**: Delhi\n- **remaining km**: 836.6\n- **eta**: 2026-10-18T14:41:48+05:30\n- **eta human**: Sun 18 Oct, 14:41 IST\n- **recorded eta**: 2026-10-18T06:20:44+05:30\n- **promised by**: 2026-10-18T07:50:44+05:30\n- **slack hours**: -6.9\n- **sla risk**: high\n**breakdown**: drive_hours=18.6; rest_hours=6.0; team_drivers=True; handling_hours=0.5; weather_buffer_hours=0.0\n- **weather risk**: low\n- **weather summary**: Low risk along the route: proceed as planned.\n- **route source**: haversine_estimate\n- **degraded**: True\n- **recommendation**: Expected 6.9 h late: notify the customer now; consider team drivers or an express carrier.",
+      "tool_calls": [
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "shp 1001 status"
+          }
+        }
+      ]
+    },
+    {
+      "id": "eta_sla",
+      "category": "eta/sla",
+      "prompt": "Will SHP-1003 make its SLA? What's the ETA?",
+      "pattern": "AgentTool -> tracking_agent -> estimate_eta",
+      "expected": [
+        "tracking_agent"
+      ],
+      "routed": [
+        "tracking_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.418,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Shipment Tracking\n**estimate eta**\n- **status**: ok\n- **shipment id**: SHP-1003\n- **shipment status**: delayed\n- **priority**: critical\n- **from city**: Gurugram\n- **destination**: Jaipur\n- **remaining km**: 263.6\n- **eta**: 2026-10-17T21:28:48+05:30\n- **eta human**: Sat 17 Oct, 21:28 IST\n- **recorded eta**: 2026-10-17T22:21:41+05:30\n- **promised by**: 2026-10-17T17:37:16+05:30\n- **slack hours**: -3.9\n- **sla risk**: high\n**breakdown**: drive_hours=5.9; rest_hours=0.0; team_drivers=True; handling_hours=2.0; weather_buffer_hours=0.0\n- **weather risk**: low\n- **weather summary**: Low risk along the route: proceed as planned.\n- **route source**: haversine_estimate\n- **degraded**: True\n- **recommendation**: Expected 3.9 h late: notify the customer now; consider team drivers or an express carrier.",
+      "tool_calls": [
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "Will SHP-1003 make its SLA? What's the ETA?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "delayed_list",
+      "category": "tracking",
+      "prompt": "List all delayed shipments",
+      "pattern": "AgentTool -> tracking_agent -> MCP list_shipments(status=delayed)",
+      "expected": [
+        "tracking_agent"
+      ],
+      "routed": [
+        "tracking_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": false,
+      "missing": [
+        "any of: delayed"
+      ],
+      "forbidden_hits": [],
+      "success": false,
+      "latency_s": 0.426,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Shipment Tracking\n**list shipments**\n- **status**: ok\n- **count**: 4\n**shipments**:\n| id | order id | customer | customer email | customer phone | origin city | destination city |\n|---|---|---|---|---|---|---|\n| SHP-1003 | ORD-5003 | Joshi Medical Supplies | orders.joshi.medical.supplies@example.com | +91 939250 86099 | Delhi | Jaipur |\n| SHP-1002 | ORD-5002 | Ananya Krishnan | ananya.krishnan@example.com | +91 967530 94080 | Bengaluru | Chennai |\n| SHP-1018 | ORD-5018 | Rao Polymers | orders.rao.polymers@example.com | +91 964210 81121 | Chennai | Hyderabad |\n| SHP-1010 | ORD-5010 | Sharma Textiles Pvt Ltd | sharma.textiles@example.com | +91 994450 97012 | Ahmedabad | Mumbai |",
+      "tool_calls": [
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "List all delayed shipments"
+          }
+        }
+      ]
+    },
+    {
+      "id": "route_distance",
+      "category": "route",
+      "prompt": "Mumbai → Pune distance",
+      "pattern": "AgentTool -> route_risk_agent -> get_route (Routes API -> OSRM -> haversine)",
+      "expected": [
+        "route_risk_agent"
+      ],
+      "routed": [
+        "route_risk_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.451,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**get route**\n- **status**: ok\n**origin**: query=Mumbai; name=Mumbai; lat=19.1; lon=72.9; precision=city\n**destination**: query=Pune; name=Pune; lat=18.5; lon=73.9; precision=city\n- **distance km**: 150.2\n- **duration min**: 200\n- **duration human**: 3 h 20 min\n- **truck duration min**: 200\n- **truck duration human**: 3 h 20 min\n- **avoid tolls**: False\n- **traffic aware**: False\n- **degraded**: True\n- **note**: Offline estimate: great-circle distance x 1.25 road factor at 45 km/h average; no traffic or road closures considered.\n- **polyline is straight line**: True",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Mumbai → Pune distance"
+          }
+        }
+      ]
+    },
+    {
+      "id": "route_disruption",
+      "category": "weather",
+      "prompt": "Any weather risk on Mumbai → Pune today?",
+      "pattern": "AgentTool -> route_risk_agent -> check_route_disruptions",
+      "expected": [
+        "route_risk_agent"
+      ],
+      "routed": [
+        "route_risk_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.419,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**check route disruptions**\n- **status**: ok\n- **origin**: Mumbai\n- **destination**: Pune\n- **overall risk**: low\n**checkpoints**:\n| role | city | risk level | summary | peak time | source |\n|---|---|---|---|---|---|\n| origin | Mumbai | low | Low weather risk expected in Mumbai for October (seasonal outlook, no live forecast). | None | seasonal_heuristic |\n| destination | Pune | low | Low weather risk expected in Pune for October (seasonal outlook, no live forecast). | None | seasonal_heuristic |\n- **recommendation**: Low risk along the route: proceed as planned.\n- **delay buffer pct**: 0\n- **sources**: [\"seasonal_heuristic\"]\n- **degraded**: True",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Any weather risk on Mumbai → Pune today?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "weather_city",
+      "category": "weather",
+      "prompt": "Any weather risk in Chennai in the next 24 hours?",
+      "pattern": "AgentTool -> route_risk_agent -> get_weather_risk (single city)",
+      "expected": [
+        "route_risk_agent"
+      ],
+      "routed": [
+        "route_risk_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.397,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**get weather risk**\n- **risk level**: high\n- **summary**: High weather risk typical for Chennai in October: northeast monsoon and Bay of Bengal cyclone season (seasonal outlook, no live forecast).\n- **hazards**: [\"northeast monsoon and Bay of Bengal cyclone season\"]\n- **region**: se_coast\n- **degraded**: True\n- **status**: ok\n- **city**: Chennai\n- **lat**: 13.1\n- **lon**: 80.3\n- **hours ahead**: 24\n- **delay buffer pct**: 25",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Any weather risk in Chennai in the next 24 hours?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "carrier_quote",
+      "category": "carrier quote",
+      "prompt": "Quote carriers Delhi → Bengaluru 800kg express",
+      "pattern": "AgentTool -> route_risk_agent -> quote_carriers",
+      "expected": [
+        "route_risk_agent"
+      ],
+      "routed": [
+        "route_risk_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.413,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**quote carriers**\n- **status**: ok\n- **origin**: Delhi\n- **destination**: Bengaluru\n- **distance km**: 2,174.8\n- **route source**: haversine_estimate\n- **route degraded**: True\n- **weight kg**: 800.0\n- **priority**: express\n- **currency**: INR\n**quotes**:\n| carrier id | carrier name | mode | cost inr | eta hours | reliability pct | score |\n|---|---|---|---|---|---|---|\n| CR-03 | AeroCargo India | air | 235010 | 13.6 | 96.0 | 70.0 |\n| CR-01 | SwiftHaul Express | road | 128171 | 44.8 | 94.0 | 57.6 |\n| CR-05 | Deccan Coastal Logistics | road | 90887 | 50.3 | 90.0 | 50.3 |\n- **recommendation**: AeroCargo India (CR-03) at INR 235,010 with ~14 h transit is the best balance for a express load (fastest delivery, most reliable (96% on-time)).",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Quote carriers Delhi → Bengaluru 800kg express"
+          }
+        }
+      ]
+    },
+    {
+      "id": "multi_stop",
+      "category": "route optimisation",
+      "prompt": "Optimise a multi-stop route from the Bengaluru depot with stops Chennai, Coimbatore and Kochi",
+      "pattern": "AgentTool -> route_risk_agent -> optimize_multi_stop_route (NN + 2-opt)",
+      "expected": [
+        "route_risk_agent"
+      ],
+      "routed": [
+        "route_risk_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.409,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**optimize multi stop route**\n- **status**: ok\n**depot**: query=Bengaluru; name=Bengaluru; lat=13.0; lon=77.6; precision=city\n- **optimized order**: [\"Coimbatore\", \"Kochi\", \"Chennai\"]\n- **optimized stop indices**: [1, 2, 0]\n**waypoints**:\n| name | lat | lon |\n|---|---|---|\n| Bengaluru | 13.0 | 77.6 |\n| Coimbatore | 11.0 | 77.0 |\n| Kochi | 9.9 | 76.3 |\n| Chennai | 13.1 | 80.3 |\n| Bengaluru | 13.0 | 77.6 |\n**legs**:\n| from | to | distance km | duration min |\n|---|---|---|---|\n| Bengaluru | Coimbatore | 285.2 | 380 |\n| Coimbatore | Kochi | 177.8 | 237 |\n| Kochi | Chennai | 699.4 | 932 |\n| Chennai | Bengaluru | 362.7 | 484 |\n- **total distance km**: 1,525.2\n- **total duration min**: 2034\n- **duration human**: 1 d 9 h 54 min\n- **truck duration human**: 1 d 9 h 54 min\n- **return to depot**: True\n- **degraded**: True\n- **note**: Offline estimate: stop order by nearest-neighbour + 2-opt on straight-line distances.",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Optimise a multi-stop route from the Bengaluru depot with stops Chennai, Coimbatore and Kochi"
+          }
+        }
+      ]
+    },
+    {
+      "id": "inventory_low",
+      "category": "inventory",
+      "prompt": "Which SKUs are low on stock?",
+      "pattern": "AgentTool -> inventory_agent -> MCP check_inventory(low_stock_only)",
+      "expected": [
+        "inventory_agent"
+      ],
+      "routed": [
+        "inventory_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": false,
+      "missing": [],
+      "forbidden_hits": [
+        "**status**: error"
+      ],
+      "success": false,
+      "latency_s": 0.446,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {
+        "reflect": 1
+      },
+      "errors": [],
+      "answer": "### Inventory\n**check inventory**\n- **status**: error\n- **error**: Warehouse 'WH-ICH' not found\n- **suggestions**: [\"WH-HYD\"]\n- **hint**: Warehouse ids: WH-BOM, WH-DEL, WH-BLR, WH-MAA, WH-HYD (or a city name).\n- **healing hint**: Re-check arguments (IDs look like SHP-1001, ORD-5001, SKU-101, TRK-101, WH-BLR; cities like Mumbai/Bengaluru); try an alternative tool or ask the user.",
+      "tool_calls": [
+        {
+          "tool": "inventory_agent",
+          "args": {
+            "request": "Which SKUs are low on stock?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "reorder",
+      "category": "inventory",
+      "prompt": "Raise a purchase order to reorder SKU-114 at WH-HYD",
+      "pattern": "AgentTool -> inventory_agent -> MCP create_reorder",
+      "expected": [
+        "inventory_agent"
+      ],
+      "routed": [
+        "inventory_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.437,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Inventory\n**create reorder**\n- **status**: ok\n- **duplicate**: False\n**purchase order**: id=PO-7005; sku=SKU-114; warehouse_id=WH-HYD; qty=114; supplier=Gujarat Solar Fab; status=open; unit_cost_inr=14,200.0; total_cost_inr=1,618,800.0\n- **message**: Raised PO-7005: 114 x Solar panel 540W mono PERC for WH-HYD, expected in 5 days.",
+      "tool_calls": [
+        {
+          "tool": "inventory_agent",
+          "args": {
+            "request": "Raise a purchase order to reorder SKU-114 at WH-HYD"
+          }
+        }
+      ]
+    },
+    {
+      "id": "dispatch_plan",
+      "category": "dispatch",
+      "prompt": "Plan today's dispatch from Mumbai",
+      "pattern": "Sequential[Loop(planner <-> critic, exit_loop), reporter]",
+      "expected": [
+        "dispatch_pipeline"
+      ],
+      "routed": [
+        "dispatch_pipeline"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.396,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "## Dispatch Plan (planner ⇄ critic)\n\n**Dispatch Planner**\n### Dispatch Planner\n**propose dispatch plan**\n- **status**: ok\n- **plan id**: PLAN-MUM-1017133652\n- **revision**: 1\n- **plan status**: proposed\n- **city**: Mumbai\n- **strategy**: greedy first-fit\n**assignments**:\n| vehicle id | vehicle type | driver | city | capacity kg | load kg | utilisation pct |\n|---|---|---|---|---|---|---|\n| TRK-101 | 32ft MXL container | Ramesh Yadav | Mumbai | 15,000.0 | 14.3 | 0.1 |\n**weather**: Surat=low\n- **pending considered**: 1\n- **vehicles available**: 2\n- **summary**: Revision 1 (greedy first-fit): 1 shipment(s) on 1 vehicle(s), 0 carrier hand-off(s), 0 unassigned.\n- **next step**: Call validate_dispatch_plan to critique this plan.\n\n**Dispatch Critic**\n- **status**: ok\n- **plan id**: PLAN-MUM-1017133652\n- **revision**: 1\n- **valid**: True\n- **score**: 97\n- **blockers**: 0\n- **warnings**: 1\n**issues**:\n| id | type | severity | vehicle id | message | suggested fix |\n|---|---|---|---|---|---|\n| ISS-1 | utilisation | warning | TRK-101 | TRK-101 (32ft MXL container) only 0.1% utilised. | Consider a smaller vehicle or consolidating more loads. |\n- **next step**: Plan is valid: exit the loop and offer commit_dispatch_plan.\n\n_Plan ready - reply 'commit the plan' to apply it._",
+      "tool_calls": [
+        {
+          "tool": "dispatch_pipeline",
+          "args": {
+            "request": "Plan today's dispatch from Mumbai"
+          }
+        }
+      ]
+    },
+    {
+      "id": "comms_draft",
+      "category": "comms",
+      "prompt": "Draft a WhatsApp delay notice for SHP-1007",
+      "pattern": "AgentTool -> comms_agent -> draft_customer_notification",
+      "expected": [
+        "comms_agent"
+      ],
+      "routed": [
+        "comms_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.437,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Customer Comms\n**draft customer notification**\n- **status**: ok\n- **shipment id**: SHP-1007\n- **channel**: whatsapp\n- **recipient**: +91 958440 82667\n- **message**: Hi Desai Solar Solutions team, *Update on shipment SHP-1007*.\nSHP-1007. The updated estimated delivery is Sun 18 Oct, 11:30 AM.\nTrack: https://track.cargomind.dev/SHP-1007\nThank you for your patience.\n- CargoMind\n- **char count**: 212\n- **category**: update\n- **tracking url**: https://track.cargomind.dev/SHP-1007\n- **requires approval**: True\n- **next step**: Show this draft to the operator; call send_notification to queue it once approved.",
+      "tool_calls": [
+        {
+          "tool": "comms_agent",
+          "args": {
+            "request": "Draft a WhatsApp delay notice for SHP-1007"
+          }
+        }
+      ]
+    },
+    {
+      "id": "ops_briefing",
+      "category": "briefing",
+      "prompt": "Morning ops briefing",
+      "pattern": "Sequential[Parallel(kpi, weather, stock watchers), writer]",
+      "expected": [
+        "ops_briefing"
+      ],
+      "routed": [
+        "ops_briefing"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.418,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "## Morning Ops Briefing\n\n**Kpi Watch**\n### Network KPIs\n**get kpis**\n- **status**: ok\n- **generated at**: 2026-10-17T13:36:53+05:30\n- **on time rate**: 78.3\n- **in transit**: 10\n- **delayed**: 4\n- **exceptions**: 2\n- **delivered today**: 2\n- **low stock skus**: 9\n- **fleet utilization**: 30.0\n- **open pos**: 4\n- **critical active**: 3\n- **total shipments**: 25\n**fleet**: available=6; on_route=3; maintenance=1\n**by status**: created=3; picked_up=2; in_transit=5; delayed=4; out_for_delivery=3; delivered=6; exception=2\n\n**Risk Watch**\n### Weather Risk\n**hub weather sweep**\n**hubs**:\n| city | risk level | summary | source | degraded |\n|---|---|---|---|---|\n| Mumbai | low | Low weather risk expected in Mumbai for October (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n| Delhi | low | Low weather risk expected in Delhi for October (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n| Bengaluru | medium | Medium weather risk typical for Bengaluru in October: monsoon showers and thunderstorms (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n| Chennai | high | High weather risk typical for Chennai in October: northeast monsoon and Bay of Bengal cyclone season (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n| Kolkata | medium | Medium weather risk typical for Kolkata in October: southwest monsoon: heavy rain, flooding (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n| Hyderabad | medium | Medium weather risk typical for Hyderabad in October: monsoon showers and thunderstorms (seasonal outlook, no live forecast). | seasonal_heuristic | True |\n- **high risk**: [\"Chennai\"]\n\n**Stock Watch**\n### Low Stock\n**check inventory**\n- **status**: ok\n- **count**: 51\n- **low stock count**: 9\n**items**:\n| sku | warehouse id | name | category | qty on hand | reorder point | reorder qty |\n|---|---|---|---|---|---|---|\n| SKU-114 | WH-HYD | Solar panel 540W mono PERC | Energy | 9 | 68 | 200 |\n| SKU-120 | WH-BLR | Lithium battery pack 48V 30Ah | Energy | 6 | 25 | 100 |\n| SKU-105 | WH-BOM | Smartphone 128GB | Electronics | 26 | 89 | 250 |\n| SKU-107 | WH-BLR | Insulin pens (cold chain) | Pharma | 69 | 223 | 600 |\n| SKU-103 | WH-MAA | Basmati rice 25kg bag | FMCG | 60 | 117 | 300 |\n| SKU-118 | WH-DEL | Nitrile surgical gloves (box of 100) | Medical | 184 | 339 | 1500 |\n| SKU-103 | WH-BLR | Basmati rice 25kg bag | FMCG | 87 | 105 | 300 |\n| SKU-107 | WH-HYD | Insulin pens (cold chain) | Pharma | 194 | 228 | 600 |\n| SKU-109 | WH-DEL | Copper wire 2.5 sq mm coil | Electricals | 85 | 92 | 300 |\n| SKU-116 | WH-MAA | Corrugated carton 18x12x12 | Packaging | 2552 | 1751 | 8000 |\n| SKU-112 | WH-BOM | Packaged drinking water 1L x12 | FMCG | 866 | 581 | 1500 |\n| SKU-110 | WH-BOM | Laptop 14in i5 | Electronics | 70 | 46 | 120 |\n\n_…and 39 more_\n\n_Next: ask me to plan dispatch, reorder low-stock SKUs, or run the disruption autopilot._",
+      "tool_calls": [
+        {
+          "tool": "ops_briefing",
+          "args": {
+            "request": "Morning ops briefing"
+          }
+        }
+      ]
+    },
+    {
+      "id": "feedback",
+      "category": "feedback",
+      "prompt": "Remember: always prioritise critical pharma shipments over express ones",
+      "pattern": "concierge tool remember_operator_feedback -> lessons injected into instructions",
+      "expected": [
+        "remember_operator_feedback"
+      ],
+      "routed": [
+        "remember_operator_feedback",
+        "tracking_agent"
+      ],
+      "precision": 0.5,
+      "recall": 1.0,
+      "f1": 0.667,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.406,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "- **status**: ok\n- **stored**: True\n- **preference**: operator_rule:remember_always_prioritise_critical_pharma_shipm\n- **lessons active**: 1\n- **message**: Saved as a lasting preference; it will be applied to all future turns.\n\n### Shipment Tracking\n**list shipments**\n- **status**: ok\n- **count**: 4\n**shipments**:\n| id | order id | customer | customer email | customer phone | origin city | destination city |\n|---|---|---|---|---|---|---|\n| SHP-1003 | ORD-5003 | Joshi Medical Supplies | orders.joshi.medical.supplies@example.com | +91 939250 86099 | Delhi | Jaipur |\n| SHP-1001 | ORD-5001 | Menon Healthcare LLP | orders.menon.healthcare@example.com | +91 985410 55830 | Mumbai | Delhi |\n| SHP-1007 | ORD-5007 | Desai Solar Solutions | orders.desai.solar.solutions@example.com | +91 958440 82667 | Hyderabad | Visakhapatnam |\n| SHP-1020 | ORD-5020 | Reddy Electronics Mart | orders.reddy.electronics.mart@example.com | +91 998180 81582 | Hyderabad | Chennai |",
+      "tool_calls": [
+        {
+          "tool": "remember_operator_feedback",
+          "args": {
+            "feedback": "Remember: always prioritise critical pharma shipments over express ones",
+            "rating": 1
+          }
+        },
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "Remember: always prioritise critical pharma shipments over express ones"
+          }
+        }
+      ]
+    },
+    {
+      "id": "vision_pod",
+      "category": "vision",
+      "prompt": "Inspect this delivery photo pod_damaged_SHP-1007.jpg for SHP-1007",
+      "pattern": "AgentTool -> vision_inspector -> inspect_delivery_photo (Gemini multimodal / Pillow)",
+      "expected": [
+        "vision_inspector"
+      ],
+      "routed": [
+        "vision_inspector"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.537,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Proof-of-Delivery Inspection\n**inspect delivery photo**\n- **status**: ok\n- **image ref**: pod_damaged_SHP-1007.jpg\n- **shipment id**: SHP-1007\n- **severity**: unknown\n- **findings**: [\"Cardboard-coloured surfaces cover ~26% of the frame (package likely in view).\"]\n- **recommended action**: manual_review\n- **confidence**: 0.2\n**image**: width=900; height=700; brightness=175.5; sharpness_edge_variance=583.8; dominant_colors=[{\"hex\": \"#c2baad\", \"share_pct\": 46.7}, {\"hex\": \"#a47b4a\", \"share_pct\": 25.3}, {\"hex\": \"#c2bbac\", \"share_pct\": 24.4}, {\"hex\": \"#cec8bd\", ...\n- **degraded**: True\n- **note**: Vision model unavailable (offline mode). Only image quality was checked locally; damage was NOT assessed. A human should review this photo.",
+      "tool_calls": [
+        {
+          "tool": "vision_inspector",
+          "args": {
+            "request": "Inspect this delivery photo pod_damaged_SHP-1007.jpg for SHP-1007\n\n[Attached delivery photo: image_ref=pod_damaged_SHP-1007.jpg]"
+          }
+        }
+      ]
+    },
+    {
+      "id": "multi_intent",
+      "category": "multi-intent",
+      "prompt": "Where is SHP-1002 and is there weather risk in Delhi?",
+      "pattern": "concierge fans out to 2 specialists in one turn",
+      "expected": [
+        "route_risk_agent",
+        "tracking_agent"
+      ],
+      "routed": [
+        "route_risk_agent",
+        "tracking_agent"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.478,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "### Routes & Risk\n**get weather risk**\n- **risk level**: low\n- **summary**: Low weather risk expected in Delhi for October (seasonal outlook, no live forecast).\n- **region**: north\n- **degraded**: True\n- **status**: ok\n- **city**: Delhi\n- **lat**: 28.6\n- **lon**: 77.2\n- **hours ahead**: 24\n- **delay buffer pct**: 0\n\n### Shipment Tracking\n**track shipment**\n- **id**: SHP-1002\n- **order id**: ORD-5002\n- **customer**: Ananya Krishnan\n- **origin city**: Bengaluru\n- **destination city**: Chennai\n- **status**: delayed\n- **priority**: express\n- **weight kg**: 31.1\n- **carrier id**: CR-01\n- **eta**: 2026-10-18T03:16:06+05:30\n- **promised by**: 2026-10-17T17:02:19+05:30\n- **last update**: 2026-10-17T12:29:41+05:30\n- **last city**: Bengaluru\n- **notes**: Heavy rain near Krishnagiri on NH-48; running behind schedule\n- **contents**: Smartphones (4 pallets)\n- **carrier name**: SwiftHaul Express\n- **is late**: True\n- **delay hours**: 10.2\n- **hours to promise**: 3.4\n- **distance km**: 377.0\n**recent events**:\n| id | shipment id | ts | status | city | note | source |\n|---|---|---|---|---|---|---|\n| 5 | SHP-1002 | 2026-10-17T00:13:33+05:30 | created | Bengaluru | Order ORD-5002 booked; manifest generated | seed |\n| 6 | SHP-1002 | 2026-10-17T04:18:56+05:30 | picked_up | Bengaluru | Picked up from Bengaluru dock; 18 packages scanned | seed |\n| 7 | SHP-1002 | 2026-10-17T08:24:18+05:30 | in_transit | Bengaluru | Departed Bengaluru hub with SwiftHaul Express | seed |\n| 8 | SHP-1002 | 2026-10-17T12:29:41+05:30 | delayed | Bengaluru | Heavy rain near Krishnagiri on NH-48; running behind schedule | seed |\n\n**estimate eta**\n- **status**: ok\n- **shipment id**: SHP-1002\n- **shipment status**: delayed\n- **priority**: express\n- **from city**: Bengaluru\n- **destination**: Chennai\n- **remaining km**: 362.7\n- **eta**: 2026-10-18T01:41:54+05:30\n- **eta human**: Sun 18 Oct, 01:41 IST\n- **recorded eta**: 2026-10-18T03:16:06+05:30\n- **promised by**: 2026-10-17T17:02:19+05:30\n- **slack hours**: -8.7\n- **sla risk**: high\n**breakdown**: drive_hours=8.1; rest_hours=0.0; team_drivers=False; handling_hours=2.0; weather_buffer_hours=2.0\n- **weather risk**: high\n- **weather summary**: High risk at Chennai: consider holding non-critical loads, re-routing, or dispatching with weather protocol (waterproofing, driver briefing) and a 25% ETA buffer; pre-alert customers.\n- **route source**: haversine_estimate\n- **degraded**: True\n- **recommendation**: Expected 8.7 h late: notify the customer now; consider team drivers or an express carrier.",
+      "tool_calls": [
+        {
+          "tool": "route_risk_agent",
+          "args": {
+            "request": "Where is SHP-1002 and is there weather risk in Delhi?"
+          }
+        },
+        {
+          "tool": "tracking_agent",
+          "args": {
+            "request": "Where is SHP-1002 and is there weather risk in Delhi?"
+          }
+        }
+      ]
+    },
+    {
+      "id": "disruption_autopilot",
+      "category": "autopilot",
+      "prompt": "Cyclone alert in Chennai — run disruption autopilot",
+      "pattern": "autonomous disruption workflow",
+      "expected": [
+        "disruption_autopilot"
+      ],
+      "routed": [
+        "disruption_autopilot"
+      ],
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "answer_pass": true,
+      "missing": [],
+      "forbidden_hits": [],
+      "success": true,
+      "latency_s": 0.4,
+      "served_by": [
+        "offline/rule-engine"
+      ],
+      "healing": {},
+      "errors": [],
+      "answer": "## Disruption Autopilot - Incident Action Plan\n\n**Impact Assessor**\n### Disruption Impact\n**assess disruption impact**\n- **status**: ok\n- **city**: Chennai\n- **event**: cyclone\n- **severity**: high\n**weather**: risk_level=high; summary=High weather risk typical for Chennai in October: northeast monsoon and Bay of Bengal cyclone season (seasonal outlook, no live forecast).; source=seasonal_heuristic; degraded=True\n- **affected shipments**: 4\n- **critical shipments**: 0\n**shipments**:\n| id | customer | priority | status | origin city | destination city | last city |\n|---|---|---|---|---|---|---|\n| SHP-1002 | Ananya Krishnan | express | delayed | Bengaluru | Chennai | Bengaluru |\n| SHP-1018 | Rao Polymers | express | delayed | Chennai | Hyderabad | Chennai |\n| SHP-1009 | Bose Electricals | express | picked_up | Chennai | Kochi | Chennai |\n| SHP-1005 | Vikram Malhotra | standard | out_for_delivery | Chennai | Bengaluru | Bengaluru |\n**vehicles in city**:\n| id | status | type | driver name | refrigerated |\n|---|---|---|---|---|\n| TRK-107 | available | Tata 407 | Karthik Subramanian | False |\n**warehouses in city**:\n| id | name | utilization pct | cold chain |\n|---|---|---|---|\n| WH-MAA | Chennai Port DC | 77.5 | False |\n**low stock in city**:\n| sku | name | warehouse id | qty on hand | reorder point |\n|---|---|---|---|---|\n| SKU-103 | Basmati rice 25kg bag | WH-MAA | 60 | 117 |\n- **headline**: Cyclone (high) in Chennai: 4 open shipments exposed (0 critical), 1 vehicles and 1 warehouse(s) in the zone.\n\n**Reroute Planner**\n### Reroute Plan\n**propose disruption reroutes**\n- **status**: ok\n- **city**: Chennai\n- **event**: cyclone\n- **severity**: high\n- **alternate hub**: Bengaluru\n- **alternate hub km**: 290.2\n**shipment actions**:\n| shipment id | priority | customer | route | action |\n|---|---|---|---|---|\n| SHP-1002 | express | Ananya Krishnan | Bengaluru → Chennai | Divert to Bengaluru hub (290.2 km) and hold for last-mile once Chennai reopens |\n| SHP-1018 | express | Rao Polymers | Chennai → Hyderabad | Stage at Bengaluru hub (290.2 km) until the cyclone clears, then resume to Hyderabad |\n| SHP-1009 | express | Bose Electricals | Chennai → Kochi | Stage at Bengaluru hub (290.2 km) until the cyclone clears, then resume to Kochi |\n| SHP-1005 | standard | Vikram Malhotra | Chennai → Bengaluru | Reroute around Chennai via Bengaluru |\n**vehicle moves**:\n| vehicle id | action |\n|---|---|\n| TRK-107 | Move to Bengaluru staging yard |\n- **requires approval**: True\n\n**Notice Drafter**\n### Customer Notices (drafts)\n**draft disruption notices**\n- **status**: ok\n- **city**: Chennai\n- **event**: cyclone\n**drafts**:\n| shipment id | customer | priority | channel | subject | message |\n|---|---|---|---|---|---|\n| SHP-1002 | Ananya Krishnan | express | email | Your shipment SHP-1002 to Chennai is delayed | Order ORD-5002 | Dear Ananya,\n\nYour shipment SHP-1002 to Chennai is delayed.\n\nReason: cyclone in Chennai. The updated estimated delivery is Sun 18 Oct, 3:16 AM.\n\nShipment: SHP-1002 (Bengaluru -> Chennai)\nContents: Smartphones (4 pallets)\nTrack live: https://track.cargomind.dev/SHP-1002\n\nWe sincerely apologise for the inconvenience and are working to get it to you as quickly as possible.\n\nWarm regards,\nCargoMind Customer Care |\n| SHP-1018 | Rao Polymers | express | email | Your shipment SHP-1018 to Hyderabad is delayed | Order ORD-5018 | Dear Rao,\n\nYour shipment SHP-1018 to Hyderabad is delayed.\n\nReason: cyclone in Chennai. The updated estimated delivery is Sun 18 Oct, 11:05 AM.\n\nShipment: SHP-1018 (Chennai -> Hyderabad)\nContents: Nitrile surgical gloves\nTrack live: https://track.cargomind.dev/SHP-1018\n\nWe sincerely apologise for the inconvenience and are working to get it to you as quickly as possible.\n\nWarm regards,\nCargoMind Customer Care |\n| SHP-1009 | Bose Electricals | express | email | Update on shipment SHP-1009 | Order ORD-5009 | Dear Bose,\n\nUpdate on shipment SHP-1009.\n\ncyclone in Chennai. The updated estimated delivery is Sun 18 Oct, 9:10 AM.\n\nShipment: SHP-1009 (Chennai -> Kochi)\nContents: Two-wheeler tyres\nTrack live: https://track.cargomind.dev/SHP-1009\n\nThank you for your patience.\n\nWarm regards,\nCargoMind Customer Care |\n- **sent**: False\n- **batched status update customers**: 1\n- **next step**: Operator approves → comms_agent send_notification per draft.\n\n_Approve with 'send the notices' / 'commit the reroutes', or ask me to adjust any action._",
+      "tool_calls": [
+        {
+          "tool": "disruption_autopilot",
+          "args": {
+            "request": "Cyclone alert in Chennai — run disruption autopilot"
+          }
+        }
+      ]
+    }
+  ],
+  "environment": {
+    "date": "2026-10-17 13:36 India Standard Time",
+    "mode": "offline",
+    "effective_mode": "offline rule-engine",
+    "live": {
+      "gemini": false,
+      "claude": false,
+      "openai": false,
+      "google_maps": false
+    },
+    "models": {
+      "fast": "gemini-3.8-flash",
+      "pro": "gemini-4-argon",
+      "vision": "gemini-3.8-flash",
+      "backup": "gemini-3.6-flash",
+      "claude": "anthropic/claude-sonnet-5-5",
+      "openai": "openai/gpt-5-mini"
+    },
+    "seed": 7,
+    "mcp": "in-process (CARGOMIND_MCP_LOCAL)",
+    "python": "3.12.15",
+    "adk": "2.12.0",
+    "platform": "Windows 11",
+    "command": "uv run python -m cargomind.evals.runner --mode offline --out docs/EVAL_REPORT.md",
+    "notes": [],
+    "only": null
+  },
+  "report_path": "docs\\EVAL_REPORT.md",
+  "json_path": "docs\\eval_results.json"
+}
