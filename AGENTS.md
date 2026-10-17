@@ -74,7 +74,17 @@ Contracts between modules: `docs/CONTRACTS.md`.
   flood, strike, bandh, closure, disruption, "alert in", landslide), CLI `autopilot` / `watchtower` / `eval`.
   Offline fixes: SKU regex needs a digit ("SKUs" was parsed as SKU-S); single-city weather → get_weather_risk instead of
   two-city check_route_disruptions; event/severity arg extraction. Created local `.env` with PASTE_* placeholders.
-  PRs: Anandb71/cargomind#1 (autopilot+watchtower) ← #2 (CLI + offline fixes, stacked on #1) ← #3 (docs/eval/live fixes).
+  Offline eval 18/18 (also fixed "Which" → WH-ICH regex, table cap dropping `status`). Live smoke run done (above).
+  PR stack (each based on the previous): Anandb71/cargomind#1 autopilot+watchtower ← #2 CLI + offline fixes ←
+  #3 eval 18/18 + handoff notes ← #4 README/docs ← #5 weather-aware staging hub + live findings ←
+  #6 keyless Esri basemap (CARTO `dark_all` now returns HTTP-200 "API KEY REQUIRED" tiles, so `tileerror` never fires)
+  + `/static` sent with `Cache-Control: no-cache`. PR #6 contains no screenshots or README changes.
+  Teammate merges the stack bottom-up (#1 into main first; GitHub retargets the next PR when its base branch is deleted).
+- Optional screenshot recipe (screenshots remain a TODO): Playwright via `uv run --no-project --with playwright python shot.py` using the installed Edge
+  (`chromium.launch(channel="msedge")`), so no browser download; the dev server is in `.claude/launch.json` (port 8099).
+- PR #6 review milestone: completed Esri attribution with the GIS user community credit, matching both service
+  metadata responses; base and reference India tiles returned HTTP 200 without credentials. Corrected PR scope to
+  basemap/cache restoration only; screenshots are not included. No autopilot or deployment behavior changed.
 
 ## NEXT STEPS / TODO (update as you go)
 1. User authorized merging PRs #1–#4. Review hardening verified: real warehouse alternatives, outbound HOLD precedence,
