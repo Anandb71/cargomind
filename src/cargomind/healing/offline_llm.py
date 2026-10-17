@@ -406,7 +406,7 @@ class OfflineLlm(BaseLlm):
     )
 
     def _compose_brief(self, ctx: list[str], request_text: str) -> str:
-        """Summarise sibling agents' work: last statement per agent, else its last tool result."""
+        """Summarise each sibling's latest substantive result or subsequent narration."""
         said: dict[str, str] = {}
         results: dict[str, Any] = {}
         order: list[str] = []
@@ -423,6 +423,9 @@ class OfflineLlm(BaseLlm):
                     said[agent] = body
             elif m.group("rtool") and m.group("rtool") != "exit_loop":
                 results[agent] = _parse_literal(body)
+                # A critic may validate a revised plan and exit without speaking again.
+                # Its newer result supersedes narration of an earlier failed revision.
+                said.pop(agent, None)
         title = self.policy.title or "Briefing"
         lines = [f"## {title}", ""]
         for agent in order:
