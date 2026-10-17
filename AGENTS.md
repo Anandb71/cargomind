@@ -82,7 +82,12 @@ Contracts between modules: `docs/CONTRACTS.md`.
   two-city check_route_disruptions; event/severity arg extraction. Created local `.env` with PASTE_* placeholders.
   Offline eval 18/18 (also fixed "Which" → WH-ICH regex, table cap dropping `status`). Live smoke run done (above).
   PR stack (each based on the previous): Anandb71/cargomind#1 autopilot+watchtower ← #2 CLI + offline fixes ←
-  #3 eval 18/18 + handoff notes ← #4 README/docs ← #5 weather-aware staging hub + live findings.
+  #3 eval 18/18 + handoff notes ← #4 README/docs ← #5 weather-aware staging hub + live findings ←
+  #6 keyless Esri basemap (CARTO `dark_all` now returns HTTP-200 "API KEY REQUIRED" tiles, so `tileerror` never fires)
+  + `/static` sent with `Cache-Control: no-cache` + dashboard screenshots in `assets/screenshots/` embedded in README.
+  Teammate merges the stack bottom-up (#1 into main first; GitHub retargets the next PR when its base branch is deleted).
+- Screenshots: Playwright via `uv run --no-project --with playwright python shot.py` using the installed Edge
+  (`chromium.launch(channel="msedge")`), so no browser download; the dev server is in `.claude/launch.json` (port 8099).
 
 ## NEXT STEPS / TODO (update as you go)
 1. Merge the PR stack in order (#1 → #5) once the user OKs; re-run hermetic pytest + offline eval on main.
