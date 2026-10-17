@@ -1,9 +1,13 @@
 <div align="center">
 
+<img src="assets/banner.svg" alt="CargoMind: the logistics control tower that heals itself" width="100%">
+
 # CargoMind
 
 **A self-healing, multi-model, multi-agent logistics control tower.**
 Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lane, truck or SKU in an India-wide 3PL network. It plans, checks its own work and keeps answering when models, APIs or servers fail.
+
+### ▶ [Open the live demo](https://cargomind-lilac.vercel.app) · [Run it locally in 60 s](#quickstart) · [Criteria → proof](#how-cargomind-meets-the-judging-criteria) · [See it in action](#see-it-in-action)
 
 [![CI](https://github.com/Anandb71/cargomind/actions/workflows/ci.yml/badge.svg)](https://github.com/Anandb71/cargomind/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
@@ -20,6 +24,15 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 
 </div>
 
+![CargoMind mission control: Watchtower alerts, network KPIs, live shipment lanes on the India map, and the ops agent](assets/screenshots/01-mission-control.png)
+<p align="center"><i>Mission control, running live: Watchtower alerts (left), network pulse KPIs, the shipment map with status-coloured lanes, the conversational ops agent (right) and the self-healing journal (bottom).</i></p>
+
+| **23** | **3 vendors** | **11 + 2** | **18 / 18** | **0** |
+|:---:|:---:|:---:|:---:|:---:|
+| Google ADK agents using `AgentTool`, `Sequential`, `Parallel` and `Loop` patterns | Gemini → Claude / GPT → offline engine, failover per request | MCP tools + resources in our own server | eval scenarios pass, **also under 30% injected chaos** | API keys needed to run it |
+
+> **Self-healing, seen live.** One real request from our live runs, straight from the healing journal: `gemini-3.8-flash` → 429 RESOURCE_EXHAUSTED · `gemini-3.6-flash` → 429 · `anthropic/claude-sonnet-5-5` → error · **served by `openai/gpt-5-mini` — recovered**. The operator just got their answer. Across those runs the journal recorded 19 automatic cross-vendor model recoveries.
+
 ---
 
 **Judge fast path:** [90-second demo](docs/DEMO_SCRIPT.md) · [criterion-by-criterion evidence](docs/JUDGING.md) · [reproducible eval report](docs/EVAL_REPORT.md). Verified: **100 tests pass**, **18/18 offline scenarios succeed**, routing **F1 0.974**. The timed demo uses the offline engine; live provider usage is visible in the trace.
@@ -28,6 +41,7 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 
 ## Contents
 
+- [See it in action](#see-it-in-action)
 - [The 30-second pitch](#the-30-second-pitch)
 - [How CargoMind meets the judging criteria](#how-cargomind-meets-the-judging-criteria)
 - [Architecture](#architecture)
@@ -55,6 +69,33 @@ Built on Google ADK, Gemini, Google Maps and MCP. Ask it about any shipment, lan
 - [License](#license)
 
 More depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sequence diagrams), [docs/JUDGING.md](docs/JUDGING.md) (criteria checklist with file links), [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md) (3-minute live demo run-sheet).
+
+---
+
+## See it in action
+
+**Disruption Autopilot: one sentence starts a multi-agent incident response.** *"Cyclone alert in Chennai, severity high: run disruption autopilot."* The map draws the impact zone around Chennai and lights up every exposed lane. Then `impact_assessor` hands off to a `ParallelAgent` (reroute planner + notice drafter), and `autopilot_commander` writes the incident action plan for the operator to approve. In this capture the journal on the right shows Gemini hitting its quota and the run continuing on the next model.
+
+![Disruption Autopilot: cyclone impact ring over Chennai with live model failover in the journal](assets/screenshots/03-disruption-autopilot.png)
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+**Multimodal proof-of-delivery inspection that knows when not to guess.** Attach a delivery photo and Gemini vision returns `damage_detected`, severity, findings and the next action. In this capture Gemini vision was over quota, so the local Pillow fallback answered instead: it marked the result `degraded`, explained why and asked for human review rather than inventing a verdict.
+
+<img src="assets/screenshots/06-pod-vision.png" alt="Gemini vision inspecting a damaged proof-of-delivery photo">
+
+</td>
+<td width="50%" valign="top">
+
+**Watchtower acts before you ask.** It scans SLAs, exceptions, stock, fleet and hub weather every 60 s. Each alert is a one-click question to the agent; weather alerts launch the autopilot.
+
+<img src="assets/screenshots/05-watchtower-alerts.png" alt="Watchtower proactive alerts panel">
+
+</td>
+</tr>
+</table>
 
 ---
 

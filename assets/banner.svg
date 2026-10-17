@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="300" viewBox="0 0 1280 300" role="img" aria-label="CargoMind: the self-healing, multi-model AI control tower for logistics">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b0f14"/>
+      <stop offset="1" stop-color="#111821"/>
+    </linearGradient>
+    <linearGradient id="lane" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffb000" stop-opacity="0"/>
+      <stop offset=".5" stop-color="#ffb000" stop-opacity=".9"/>
+      <stop offset="1" stop-color="#ffb000" stop-opacity="0"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#1c2530" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="ring" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ff5d6c" stop-opacity=".35"/>
+      <stop offset="1" stop-color="#ff5d6c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1280" height="300" rx="14" fill="url(#bg)"/>
+  <rect width="1280" height="300" rx="14" fill="url(#grid)" opacity=".55"/>
+
+  <!-- network lanes (right side), echoing the dashboard map -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M820 70 C 900 120, 960 150, 1060 120 S 1200 60, 1250 90" stroke="#4aa3ff" stroke-width="2.5" stroke-dasharray="6 7" opacity=".85"/>
+    <path d="M840 230 C 930 200, 1000 210, 1090 170 S 1190 120, 1240 150" stroke="#ff5d6c" stroke-width="2.5" opacity=".8"/>
+    <path d="M880 150 C 960 160, 1030 90, 1110 80" stroke="#3ddc97" stroke-width="2" opacity=".75"/>
+    <path d="M760 160 C 860 150, 960 250, 1100 240" stroke="url(#lane)" stroke-width="3"/>
+  </g>
+  <circle cx="1090" cy="170" r="58" fill="url(#ring)"/>
+  <circle cx="1090" cy="170" r="40" fill="none" stroke="#ff5d6c" stroke-width="1.5" stroke-dasharray="4 5" opacity=".7"/>
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11" font-weight="700" letter-spacing="1">
+    <rect x="1054" y="104" width="34" height="20" rx="3" fill="#0b0f14" stroke="#ffb000" stroke-width="2"/><text x="1071" y="118" fill="#ffb000" text-anchor="middle">BOM</text>
+    <rect x="1073" y="160" width="34" height="20" rx="3" fill="#0b0f14" stroke="#ffb000" stroke-width="2"/><text x="1090" y="174" fill="#ffb000" text-anchor="middle">MAA</text>
+    <rect x="1192" y="78" width="34" height="20" rx="3" fill="#0b0f14" stroke="#ffb000" stroke-width="2"/><text x="1209" y="92" fill="#ffb000" text-anchor="middle">DEL</text>
+    <rect x="903" y="140" width="34" height="20" rx="3" fill="#0b0f14" stroke="#ffb000" stroke-width="2"/><text x="920" y="154" fill="#ffb000" text-anchor="middle">BLR</text>
+    <rect x="1010" y="226" width="34" height="20" rx="3" fill="#0b0f14" stroke="#ffb000" stroke-width="2"/><text x="1027" y="240" fill="#ffb000" text-anchor="middle">HYD</text>
+  </g>
+
+  <!-- mark + wordmark -->
+  <g transform="translate(64 78)">
+    <rect width="64" height="64" rx="12" fill="#ffb000"/>
+    <path d="M14 44 L26 30 L36 38 L50 18" fill="none" stroke="#0b0f14" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="50" cy="18" r="4.5" fill="#0b0f14"/>
+  </g>
+  <text x="148" y="133" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif" font-size="58" font-weight="800" letter-spacing="2" fill="#f4f6f8">CARGO<tspan fill="#ffb000">MIND</tspan></text>
+  <text x="66" y="190" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif" font-size="25" font-weight="600" fill="#e6eaef">The logistics control tower that heals itself.</text>
+  <text x="66" y="224" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif" font-size="17" fill="#9aa7b5">23 Google ADK agents · Gemini + Claude/GPT failover · MCP · Google Maps · live chaos-tested</text>
+  <rect x="66" y="246" width="250" height="3" rx="1.5" fill="#ffb000"/>
+</svg>
