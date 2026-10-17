@@ -1,6 +1,6 @@
 # CargoMind architecture
 
-This document goes one level deeper than the [README](../README.md). It covers the design principles, the layers, two end-to-end sequence diagrams (a dispatch request and a self-healing fallback), the MCP failover path, the event stream, the data model and how to extend the system.
+This document goes one level deeper than the [README](../README.md). It covers the design principles, the layers, two end-to-end sequence diagrams (a dispatch request and a self-healing fallback), the MCP failover path, the Disruption Autopilot and Watchtower, the event stream, the data model and how to extend the system.
 
 - [Design principles](#design-principles)
 - [Layers](#layers)
@@ -9,6 +9,8 @@ This document goes one level deeper than the [README](../README.md). It covers t
 - [Sequence 2: self-healing fallback](#sequence-2-self-healing-fallback)
 - [Sequence 3: MCP failover](#sequence-3-mcp-failover)
 - [Sequence 4: ops briefing fan-out](#sequence-4-ops-briefing-fan-out)
+- [Sequence 5: Disruption Autopilot](#sequence-5-disruption-autopilot)
+- [Watchtower: proactive alerts](#watchtower-proactive-alerts)
 - [Circuit breakers](#circuit-breakers)
 - [The offline rule-engine](#the-offline-rule-engine)
 - [Event stream contract](#event-stream-contract)
@@ -33,9 +35,10 @@ This document goes one level deeper than the [README](../README.md). It covers t
 
 | Layer | Modules | Responsibility |
 |---|---|---|
-| Interfaces | `web/server.py` + `web/static/`, `cli.py`, ADK Dev UI (`adk web src`), external MCP clients | Human and agent entry points |
+| Interfaces | `web/server.py` + `web/static/`, `cli.py` (incl. `autopilot`, `watchtower`, `eval`), ADK Dev UI (`adk web src`), external MCP clients | Human and agent entry points |
 | Runtime | `runtime.py` | One ADK `Runner` over `App(root_agent, plugins=[SelfHealingPlugin()])`, an in-memory session service, and `stream_chat()`, which merges agent events with live healing events |
-| Agents | `agent.py` | 13 `LlmAgent`s + 2 `SequentialAgent`s + 1 `LoopAgent` + 1 `ParallelAgent` |
+| Agents | `agent.py`, `autopilot.py` | 17 `LlmAgent`s + 3 `SequentialAgent`s + 1 `LoopAgent` + 2 `ParallelAgent`s (23 agents) |
+| Proactive monitor | `watchtower.py` | Background scan every 60 s (started by the web server) that raises SLA, exception, stock, fleet and weather alerts |
 | Models | `healing/resilient_llm.py`, `healing/offline_llm.py` | Per-agent `ResilientLlm` chain: Gemini → Gemini backup → Claude/GPT (LiteLLM) → `OfflineLlm` |
 | Healing | `healing/plugin.py`, `breaker.py`, `chaos.py`, `journal.py`, `mcp_tools.py` | Argument repair, retries, breakers, reflection, fault injection, journal |
 | Tools | `tools/geo.py`, `weather.py`, `planning.py`, `vision.py`, `comms.py`, `feedback/store.py`, MCP tools | Domain actions + external API calls with provider fallbacks |
@@ -48,7 +51,7 @@ This document goes one level deeper than the [README](../README.md). It covers t
 
 | Agent | Type | Model tier | Tools | Writes state |
 |---|---|---|---|---|
-| `cargomind_concierge` | LlmAgent (root) | fast | 7 × `AgentTool`, `commit_dispatch_plan`, `remember_operator_feedback` | – |
+| `cargomind_concierge` | LlmAgent (root) | fast | 8 × `AgentTool`, `commit_dispatch_plan`, `remember_operator_feedback` | – |
 | `tracking_agent` | LlmAgent | fast | MCP `track_shipment`, `list_shipments`, `shipment_history`, `update_shipment_status`. `estimate_eta` | – |
 | `route_risk_agent` | LlmAgent | fast | `get_route`, `optimize_multi_stop_route`, `geocode`, `get_weather_risk`, `check_route_disruptions`, `quote_carriers` | – |
 | `inventory_agent` | LlmAgent | fast | MCP `check_inventory`, `create_reorder`, `list_warehouses` | – |
@@ -63,6 +66,12 @@ This document goes one level deeper than the [README](../README.md). It covers t
 | `signal_fanout` | ParallelAgent | – | `kpi_watch`, `risk_watch`, `stock_watch` | – |
 | `kpi_watch` / `risk_watch` / `stock_watch` | LlmAgent | fast | MCP `get_kpis` / `hub_weather_sweep` / MCP `check_inventory` | `kpi_snapshot` / `risk_snapshot` / `stock_snapshot` |
 | `briefing_writer` | LlmAgent | fast | – (reads `{kpi_snapshot?}`, `{risk_snapshot?}`, `{stock_snapshot?}` from the instruction template) | – |
+| `disruption_autopilot` | SequentialAgent | – | `impact_assessor` → `mitigation_fanout` → `autopilot_commander` | – |
+| `impact_assessor` | LlmAgent | fast | `assess_disruption_impact` | `autopilot_impact` |
+| `mitigation_fanout` | ParallelAgent | – | `reroute_planner`, `notice_drafter` | – |
+| `reroute_planner` | LlmAgent | pro | `propose_disruption_reroutes` | `autopilot_reroutes` |
+| `notice_drafter` | LlmAgent | fast | `draft_disruption_notices` (drafts only, never sends) | `autopilot_notices` |
+| `autopilot_commander` | LlmAgent | fast | – (reads `{autopilot_impact?}`, `{autopilot_reroutes?}`, `{autopilot_notices?}`) | – |
 
 The concierge's instruction is a **function** (`concierge_instruction(ctx)`), so ADK evaluates it on every turn. That is how `render_lessons_block()` (operator feedback) reaches the model without a restart. `AgentTool` runs each specialist on its own sub-session and propagates state changes back to the parent session. That is how `current_plan` written inside `dispatch_pipeline` is visible to `commit_dispatch_plan`, which the concierge calls turns later.
 
@@ -272,6 +281,49 @@ sequenceDiagram
 
 ---
 
+## Sequence 5: Disruption Autopilot
+
+Triggered when the concierge's router sees *autopilot, cyclone, flood, strike, bandh, closure, disruption, landslide* or *"alert in"* (also from a Watchtower weather alert's suggested prompt). Defined in `autopilot.py`.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as concierge
+    participant AP as disruption_autopilot (Sequential)
+    participant IA as impact_assessor
+    participant RP as reroute_planner (pro)
+    participant ND as notice_drafter
+    participant AC as autopilot_commander
+
+    C->>AP: AgentTool disruption_autopilot (city, event, severity)
+    AP->>IA: assess_disruption_impact
+    IA-->>AP: state autopilot_impact (exposed shipments, vehicles, warehouses, weather)
+    par mitigation_fanout (ParallelAgent)
+        AP->>RP: propose_disruption_reroutes
+        RP-->>AP: state autopilot_reroutes (alternate hub, reroute/hold, vehicle moves)
+    and
+        AP->>ND: draft_disruption_notices
+        ND-->>AP: state autopilot_notices (drafts, sent=false)
+    end
+    AP->>AC: instruction template reads the three outputs
+    AC-->>C: Incident action plan + "Approval needed"
+```
+
+Nothing is executed: notices are sent and reroutes applied only after the operator approves. `run_autopilot(city, event, severity)` calls the three tools directly (no LLM) for `cargomind autopilot` and the tests.
+
+---
+
+## Watchtower: proactive alerts
+
+`watchtower.py` runs without a user prompt. The web server's lifespan starts `run_watchtower(60)` as an asyncio task unless `CARGOMIND_WATCHTOWER=0`, and cancels it on shutdown.
+
+- `scan_once()` runs the shipment (SLA risk: `eta > promised_by` or `delayed`; `exception`), low-stock-without-open-PO, fleet (fuel < 20%, driver hours < 1 h) and hub-weather (6 hubs concurrently, 8 s timeout each) checks, and returns `{"new": [...], "active": [...]}`. Alerts that persist keep their first `raised_at`.
+- Each alert is `{id, kind, severity, title, detail, suggested_prompt, raised_at}`. `latest_alerts()` sorts critical → warning → info. Weather alerts suggest running the Disruption Autopilot.
+- A failing check is journaled as a `fault` and skipped; the loop retries on the next interval. Weather errors are skipped silently.
+- Exposed at `GET /api/alerts` and `POST /api/alerts/scan`, in the dashboard's Watchtower panel, and as `uv run cargomind watchtower` (one scan).
+
+---
+
 ## Circuit breakers
 
 One breaker per component: `model:<id>`, `tool:<name>` and `mcp:cargomind-logistics`. Thresholds come from `config.py`. Every transition is journaled (`breaker_open` / `breaker_close`) and visible in the dashboard and at `GET /api/healing`.
@@ -298,7 +350,7 @@ stateDiagram-v2
 - **Writers.** `echo_context` policies compose the briefing or report from sibling agents' outputs.
 - **Rendering.** Tool results become markdown (key facts + tables). Each response carries `served_by: offline/rule-engine`.
 
-Because it is deterministic, it doubles as a test oracle. CI runs the complete 8-step demo through it under 30% chaos.
+Because it is deterministic, it doubles as a test oracle. CI runs the complete 8-step demo through it under 30% chaos, and `cargomind eval --mode offline` scores 18 routing/answer scenarios against it ([EVAL_REPORT.md](EVAL_REPORT.md)).
 
 ---
 
@@ -344,7 +396,7 @@ SQLite at `data/cargomind.db` (WAL mode), created and seeded deterministically (
 
 - **Secrets.** Keys are read only from the environment or `.env`. `.env` is git-ignored and docker-ignored. Placeholder values are scrubbed so SDKs never send them. Errors are reported without keys (HTTP failures are journaled as status codes). On Cloud Run, `deploy/cloudrun.sh` stores keys in **Secret Manager**.
 - **Uploads.** Image type is checked by magic bytes **and** a Pillow `verify()`, with an 8 MB cap. Files are stored under random UUID names, served only through a strict filename regex, and read by the agent only from inside `UPLOAD_DIR`.
-- **Side effects are gated.** Commit, send, reorder and status changes require an explicit operator instruction. Messages go to a simulated outbox. Carrier bookings are suggested, never executed.
+- **Side effects are gated.** Commit, send, reorder and status changes require an explicit operator instruction. The Disruption Autopilot only drafts notices and proposes reroutes. Messages go to a simulated outbox. Carrier bookings are suggested, never executed.
 - **MCP hygiene.** stdout is reserved for JSON-RPC and logs go to stderr. Look-up misses return structured errors, not exceptions.
 - **Demo scope.** The dashboard has no authentication. For a shared deployment, drop `--allow-unauthenticated` and put Cloud Run behind IAP or an identity-aware proxy.
 

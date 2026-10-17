@@ -5,6 +5,9 @@
   cargomind web             launch the mission-control dashboard (http://localhost:8080)
   cargomind mcp             run the logistics MCP server on stdio (for Claude Desktop / any MCP client)
   cargomind doctor          show which models / APIs are live and run a smoke test
+  cargomind autopilot CITY  run the Disruption Autopilot (--event cyclone --severity high [--agent])
+  cargomind watchtower      one proactive Watchtower scan (SLA, stock, fleet, weather alerts)
+  cargomind eval            run the evaluation suite (same flags as `python -m cargomind.evals.runner`)
   cargomind reset-db        re-seed the demo database
 """
 from __future__ import annotations
@@ -92,6 +95,38 @@ def _doctor() -> None:
     print("smoke:", asyncio.run(ask("Where is SHP-1003?", session_id="doctor"))[:400])
 
 
+async def _autopilot(city: str, event: str, severity: str, via_agent: bool) -> None:
+    if via_agent:  # full multi-agent workflow through the concierge (LLMs, healing, journal)
+        from cargomind.runtime import ask
+
+        _print_mode()
+        print(await ask(f"{event} alert in {city}, severity {severity} - run disruption autopilot", session_id="cli-autopilot", verbose=True))
+        return
+    from cargomind.autopilot import run_autopilot
+
+    r = await run_autopilot(city, event, severity)
+    if r.get("status") != "ok":
+        print(json.dumps(r, indent=2))
+        return
+    print(r["impact"]["headline"], f"| weather: {r['impact']['weather'].get('risk_level')}\n")
+    print(f"Actions (alternate hub: {r['reroutes']['alternate_hub']}):")
+    for a in r["reroutes"]["shipment_actions"]:
+        print(f"  {a['shipment_id']} [{a['priority']}] {a['route']}: {a['action']}")
+    for v in r["reroutes"]["vehicle_moves"]:
+        print(f"  {v['vehicle_id']}: {v['action']}")
+    print(f"\nCustomer notices drafted (not sent): {len(r['notices']['drafts'])}, "
+          f"batched status update: {r['notices']['batched_status_update_customers']}")
+
+
+async def _watchtower() -> None:
+    from cargomind.watchtower import scan_once
+
+    r = await scan_once()
+    for a in r["active"]:
+        print(f"[{a['severity']:8}] {a['title']} - {a['detail']}\n           ask: {a['suggested_prompt']}")
+    print(f"\n{len(r['active'])} active alert(s)")
+
+
 def main(argv: list[str] | None = None) -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -105,6 +140,19 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("mcp")
     sub.add_parser("doctor")
     sub.add_parser("reset-db")
+    a = sub.add_parser("autopilot", help="Disruption Autopilot for a city")
+    a.add_argument("city")
+    a.add_argument("--event", default="cyclone", help="cyclone|flood|strike|closure|...")
+    a.add_argument("--severity", default="high", choices=["low", "medium", "high"])
+    a.add_argument("--agent", action="store_true", help="run through the multi-agent concierge instead of the direct tools")
+    sub.add_parser("watchtower")
+    sub.add_parser("eval", add_help=False)
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "eval":  # pass every flag straight through to the eval runner
+        from cargomind.evals.runner import main as eval_main
+
+        eval_main(argv[1:])
+        return
     args = p.parse_args(argv)
 
     if args.cmd == "chat":
@@ -125,6 +173,10 @@ def main(argv: list[str] | None = None) -> None:
         mcp_main()
     elif args.cmd == "doctor":
         _doctor()
+    elif args.cmd == "autopilot":
+        asyncio.run(_autopilot(args.city, args.event, args.severity, args.agent))
+    elif args.cmd == "watchtower":
+        asyncio.run(_watchtower())
     elif args.cmd == "reset-db":
         from cargomind.data import db
 
