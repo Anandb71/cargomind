@@ -154,7 +154,7 @@ high-weather-risk issues.""",
 dispatch_reporter = LlmAgent(
     name="dispatch_reporter",
     description="Reports the final dispatch plan.",
-    model=build_model("fast", OfflinePolicy(agent="dispatch_reporter", echo_context=True)),
+    model=build_model("fast", OfflinePolicy(agent="dispatch_reporter", title="Dispatch Plan (planner ⇄ critic)", echo_context=True)),
     instruction="""Summarise the final dispatch plan from the planner/critic exchange: revisions made,
 issues fixed, final assignments table, deferred shipments and why. End by asking the operator to
 reply 'commit the plan' to apply it.""",
@@ -223,7 +223,7 @@ stock_watch = LlmAgent(
 )
 briefing_writer = LlmAgent(
     name="briefing_writer", description="Writes the morning ops briefing.",
-    model=build_model("fast", OfflinePolicy(agent="briefing_writer", echo_context=True)),
+    model=build_model("fast", OfflinePolicy(agent="briefing_writer", title="Morning Ops Briefing", echo_context=True, help_text="Next: ask me to plan dispatch, reorder low-stock SKUs, or run the disruption autopilot.")),
     instruction="""Write a crisp morning ops briefing for the control-tower lead using:
 KPIs: {kpi_snapshot?}
 Weather: {risk_snapshot?}

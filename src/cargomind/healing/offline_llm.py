@@ -170,8 +170,39 @@ def _fmt_value(v: Any) -> str:
     return str(v)
 
 
+def _unwrap_mcp(obj: Any) -> Any:
+    """MCP tool results arrive as {content:[{type:text,text:json}], structuredContent, isError}."""
+    if isinstance(obj, dict) and isinstance(obj.get("content"), list) and ("isError" in obj or "structuredContent" in obj):
+        sc = obj.get("structuredContent")
+        if isinstance(sc, dict):
+            return sc.get("result", sc) if set(sc) == {"result"} else sc
+        texts = [c.get("text", "") for c in obj["content"] if isinstance(c, dict)]
+        joined = "\n".join(texts)
+        try:
+            return json.loads(joined)
+        except (ValueError, TypeError):
+            return joined
+    return obj
+
+
+def _parse_literal(text: str) -> Any:
+    import ast
+
+    text = text.strip()
+    for loader in (json.loads, ast.literal_eval):
+        try:
+            return loader(text)
+        except Exception:  # noqa: BLE001
+            continue
+    return text
+
+
+_SKIP_KEYS = {"polyline", "coordinates", "provider_chain_tried", "customer_email", "customer_phone", "created_at", "source"}
+
+
 def render(obj: Any, depth: int = 0) -> str:
     """Readable markdown for arbitrary tool output."""
+    obj = _unwrap_mcp(obj)
     if isinstance(obj, str):
         return obj
     if isinstance(obj, dict):
@@ -179,7 +210,7 @@ def render(obj: Any, depth: int = 0) -> str:
             return render(obj["result"], depth)
         lines = []
         for k, v in obj.items():
-            if k in ("polyline", "coordinates", "provider_chain_tried") or v in (None, "", [], {}):
+            if k in _SKIP_KEYS or v in (None, "", [], {}):
                 continue
             if isinstance(v, list) and v and all(isinstance(x, dict) for x in v):
                 lines.append(f"**{k.replace('_', ' ')}**:\n{_table(v)}")
@@ -217,6 +248,11 @@ def _has(content: types.Content, attr: str) -> bool:
     return any(getattr(p, attr, None) for p in (content.parts or []))
 
 
+_ZERO_USAGE = types.GenerateContentResponseUsageMetadata(
+    prompt_token_count=0, candidates_token_count=0, total_token_count=0
+)
+
+
 class OfflineLlm(BaseLlm):
     model: str = OFFLINE_MODEL
     policy: OfflinePolicy = Field(default_factory=OfflinePolicy)
@@ -244,7 +280,9 @@ class OfflineLlm(BaseLlm):
         user_texts = [
             _text_of(c) for c in contents if c.role == "user" and _text_of(c) and not _has(c, "function_response")
         ]
-        request_text = next((t for t in user_texts if not t.startswith("For context")), user_texts[-1] if user_texts else "")
+        real_texts = [t for t in user_texts if not t.startswith("For context")]
+        # the operator's latest request (multi-turn safe); sibling-agent context is not a request
+        request_text = real_texts[-1] if real_texts else (user_texts[-1] if user_texts else "")
         current_text = user_texts[-1] if user_texts else ""
         turn = contents[start + 1 :]
         responses = [
@@ -257,7 +295,7 @@ class OfflineLlm(BaseLlm):
             # loop finisher (critic): plan valid -> exit_loop
             pol = self.policy
             if pol.finish_tool and pol.finish_tool in tools and pol.finish_tool not in called:
-                resp = last.response or {}
+                resp = _unwrap_mcp(last.response or {})
                 if isinstance(resp, dict) and resp.get(pol.finish_when_key) is True:
                     return self._call([(pol.finish_tool, {})])
             # chained follow-ups
@@ -274,9 +312,9 @@ class OfflineLlm(BaseLlm):
             ctx = [t for t in user_texts if t.startswith("For context")]
             return self._text(self._compose_brief(ctx, request_text))
 
-        chosen = self._choose(f"{request_text} {current_text}" if current_text != request_text else request_text, tools)
+        chosen = self._choose(request_text, tools)
         if chosen:
-            calls = self._build_calls(chosen, request_text if not current_text.startswith("For context") else f"{request_text} {current_text}", tools)
+            calls = self._build_calls(chosen, request_text, tools)
             if calls:
                 return self._call(calls)
             missing = ", ".join(chosen)
@@ -341,17 +379,43 @@ class OfflineLlm(BaseLlm):
             text = f"### {title}\n{text}"
         return text
 
-    @staticmethod
-    def _compose_brief(ctx: list[str], request_text: str) -> str:
-        lines = ["## Morning Ops Briefing", ""]
+    _CTX_RE = re.compile(
+        r"\[(?P<agent>[^\]]+)\]\s*(?P<kind>said|called tool\s*`?(?P<ctool>\w+)`?[^\n]*|`?(?P<rtool>\w+)`?\s*tool returned result)"
+        r"[^\n]*\n?\s*(?:<<<BEGIN_QUOTED_AGENT_CONTENT>>>\s*(?P<quoted>.*?)\s*<<<END_QUOTED_AGENT_CONTENT>>>|(?P<plain>.*))",
+        re.S,
+    )
+
+    def _compose_brief(self, ctx: list[str], request_text: str) -> str:
+        """Summarise sibling agents' work: last statement per agent, else its last tool result."""
+        said: dict[str, str] = {}
+        results: dict[str, Any] = {}
+        order: list[str] = []
         for c in ctx:
-            m = re.match(r"For context:\s*\[([^\]]+)\]\s*(said|`?\w+`? tool returned result|called tool)?:?\s*(.*)", c, re.S)
-            if m and "called tool" in (m.group(2) or ""):
+            m = self._CTX_RE.search(c)
+            if not m:
                 continue
-            body = m.group(3) if m else c
-            who = m.group(1).replace("_", " ").title() if m else "Signal"
-            lines.append(f"**{who}**\n{body.strip()[:1500]}\n")
-        lines.append("_Recommended next step: ask me to plan dispatch or reorder low-stock SKUs._")
+            agent = m.group("agent")
+            body = (m.group("quoted") if m.group("quoted") is not None else m.group("plain") or "").strip()
+            if agent not in order:
+                order.append(agent)
+            if m.group("kind") == "said":
+                if body and body.lower() not in ("none", "null"):
+                    said[agent] = body
+            elif m.group("rtool") and m.group("rtool") != "exit_loop":
+                results[agent] = _parse_literal(body)
+        title = self.policy.title or "Briefing"
+        lines = [f"## {title}", ""]
+        for agent in order:
+            who = agent.replace("_", " ").title()
+            if agent in said:
+                body = said[agent]
+            elif agent in results:
+                body = render(results[agent])
+            else:
+                continue
+            lines.append(f"**{who}**\n{body.strip()[:2500]}\n")
+        if self.policy.help_text:
+            lines.append(f"_{self.policy.help_text}_")
         return "\n".join(lines)
 
     def _call(self, calls: list[tuple[str, dict]]) -> LlmResponse:
@@ -359,10 +423,12 @@ class OfflineLlm(BaseLlm):
         return LlmResponse(
             content=types.Content(role="model", parts=parts),
             custom_metadata={"served_by": self.model},
+            usage_metadata=_ZERO_USAGE,
         )
 
     def _text(self, text: str) -> LlmResponse:
         return LlmResponse(
             content=types.Content(role="model", parts=[types.Part(text=text)]),
             custom_metadata={"served_by": self.model},
+            usage_metadata=_ZERO_USAGE,
         )
