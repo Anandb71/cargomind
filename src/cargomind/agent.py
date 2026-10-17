@@ -23,7 +23,7 @@ from cargomind.feedback.store import remember_operator_feedback, render_lessons_
 from cargomind.healing.offline_llm import OfflinePolicy, OfflineRule as R
 from cargomind.healing.plugin import SelfHealingPlugin
 from cargomind.healing.resilient_llm import build_model
-from cargomind.mcp_tools import mcp
+from cargomind.mcp_tools import google_maps_mcp, mcp
 from cargomind.tools import comms, geo, planning, vision, weather
 
 HUBS = ["Mumbai", "Delhi", "Bengaluru", "Chennai", "Kolkata", "Hyderabad"]
@@ -98,9 +98,11 @@ route_risk_agent = LlmAgent(
     instruction=COMMON + """
 You are the Route & Risk specialist. Use get_route / optimize_multi_stop_route for road distance and
 time (Google Routes API with automatic fallbacks), check_route_disruptions / get_weather_risk for
-weather risk, quote_carriers for carrier selection. Always state the data source and recommend an action.""",
+weather risk, quote_carriers for carrier selection. If gmaps_* tools (Google's hosted Maps MCP server)
+are present, use gmaps_search_places to find depots/fuel stops/places near a city and cross-check
+weather with gmaps_lookup_weather. Always state the data source and recommend an action.""",
     tools=[geo.get_route, geo.optimize_multi_stop_route, geo.geocode, weather.get_weather_risk,
-           weather.check_route_disruptions, planning.quote_carriers],
+           weather.check_route_disruptions, planning.quote_carriers, *google_maps_mcp()],
 )
 
 inventory_agent = LlmAgent(

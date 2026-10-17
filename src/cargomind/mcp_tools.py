@@ -105,3 +105,53 @@ class ResilientMcpToolset(BaseToolset):
 
 def mcp(*tool_names: str) -> ResilientMcpToolset:
     return ResilientMcpToolset(list(tool_names))
+
+
+class GoogleMapsMcpToolset(BaseToolset):
+    """Google's hosted Maps MCP server (Grounding Lite, Streamable HTTP).
+
+    Adds Google-grounded `search_places`, `lookup_weather` and `compute_routes`
+    tools. Optional: if the key lacks access or the endpoint is down, the
+    breaker opens and the agent silently keeps its own Routes/OSRM/Open-Meteo tools.
+    """
+
+    def __init__(self):
+        super().__init__()
+        from google.adk.tools.mcp_tool.mcp_session_manager import StreamableHTTPConnectionParams
+
+        self._mcp = McpToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url=config.GOOGLE_MAPS_MCP_URL,
+                headers={"X-Goog-Api-Key": config.GOOGLE_MAPS_API_KEY or ""},
+                timeout=10.0,
+            ),
+            tool_name_prefix="gmaps",
+        )
+
+    async def get_tools(self, readonly_context=None) -> list[BaseTool]:
+        breaker = _breaker("mcp:google-maps")
+        if breaker and not breaker.allow():
+            return []
+        try:
+            tools = await self._mcp.get_tools(readonly_context)
+            if breaker:
+                breaker.success()
+            return tools
+        except Exception as exc:  # noqa: BLE001
+            if breaker:
+                breaker.failure()
+            _journal("fallback", "mcp:google-maps", f"{type(exc).__name__}: {str(exc)[:160]}",
+                     action="continue with built-in Routes/OSRM + Open-Meteo tools", outcome="degraded")
+            return []
+
+    async def close(self) -> None:
+        try:
+            await self._mcp.close()
+        except Exception:
+            pass
+
+
+def google_maps_mcp() -> list[BaseToolset]:
+    if config.GOOGLE_MAPS_API_KEY and config.USE_GOOGLE_MAPS_MCP and not config.FORCE_OFFLINE:
+        return [GoogleMapsMcpToolset()]
+    return []

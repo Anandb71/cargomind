@@ -50,7 +50,7 @@ GEMINI_FAST = os.getenv("CARGOMIND_GEMINI_FAST", "gemini-3.8-flash")
 # Deep reasoning model for planning + critic
 GEMINI_PRO = os.getenv("CARGOMIND_GEMINI_PRO", "gemini-4-argon")
 # Same-vendor backup used before switching vendors
-GEMINI_BACKUP = os.getenv("CARGOMIND_GEMINI_BACKUP", "gemini-2.5-flash")
+GEMINI_BACKUP = os.getenv("CARGOMIND_GEMINI_BACKUP", "gemini-3.6-flash")
 # Multimodal vision model for proof-of-delivery inspection
 GEMINI_VISION = os.getenv("CARGOMIND_GEMINI_VISION", GEMINI_FAST)
 # Second vendor used as cross-provider fallback / independent critic (LiteLLM id)
@@ -58,6 +58,9 @@ CLAUDE_MODEL = os.getenv("CARGOMIND_CLAUDE_MODEL", "anthropic/claude-sonnet-5-5"
 OPENAI_MODEL = os.getenv("CARGOMIND_OPENAI_MODEL", "openai/gpt-5-mini")
 
 FORCE_OFFLINE = os.getenv("CARGOMIND_OFFLINE", "false").lower() in ("1", "true")
+# Google's hosted Maps MCP server (Grounding Lite): search_places / lookup_weather / compute_routes
+GOOGLE_MAPS_MCP_URL = os.getenv("CARGOMIND_GOOGLE_MAPS_MCP_URL", "https://mapstools.googleapis.com/mcp")
+USE_GOOGLE_MAPS_MCP = os.getenv("CARGOMIND_GOOGLE_MAPS_MCP", "true").lower() in ("1", "true")
 # Serve the MCP tool set in-process instead of spawning the stdio server (tests / restricted hosts)
 FORCE_MCP_LOCAL = os.getenv("CARGOMIND_MCP_LOCAL", "false").lower() in ("1", "true")
 
